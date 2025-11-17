@@ -1,8 +1,10 @@
 package com.example.seriousmode
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import Activity.NextActivity  // <-- Add this import for your NextActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var roleRadioGroup: RadioGroup
@@ -33,6 +35,19 @@ class MainActivity : AppCompatActivity() {
                 password == "dikoalam@2"
             ) {
                 Toast.makeText(this, "Demo login successful!", Toast.LENGTH_SHORT).show()
+
+                // Determine the selected role from the radio group
+                val selectedRole = if (roleRadioGroup.checkedRadioButtonId == R.id.radioStudent) {
+                    "Student"
+                } else {
+                    "Administrator"
+                }
+
+                // Pass the role to NextActivity using intent
+                val intent = Intent(this, NextActivity::class.java)
+                intent.putExtra("role", selectedRole)
+                startActivity(intent)
+                finish()
             } else {
                 Toast.makeText(this, "Invalid login credentials", Toast.LENGTH_SHORT).show()
             }

@@ -55,7 +55,7 @@
             android:layout_height="wrap_content"
             app:cardCornerRadius="18dp"
             app:cardElevation="10dp"
-            android:background="#FFFFFF"
+            android:background="#F2F3F4"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="28dp">
 
