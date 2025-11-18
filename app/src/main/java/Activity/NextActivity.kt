@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
@@ -33,7 +34,10 @@ class NextActivity : ComponentActivity() {
                 Scaffold(
                     floatingActionButton = {
                         FloatingActionButton(
-                            onClick = { /* TODO: Add action */ },
+                            onClick = {
+                                val intent = Intent(this@NextActivity, SubmitReportActivity::class.java)
+                                startActivity(intent)
+                            },
                             containerColor = Color(0xFFE1001B),
                             shape = CircleShape
                         ) {
@@ -47,7 +51,6 @@ class NextActivity : ComponentActivity() {
                             .padding(innerPadding)
                             .background(Color(0xFFF5F8F9))
                     ) {
-                        // Pass role to the header!
                         TopHeader(
                             role = role,
                             onLogout = {
@@ -116,45 +119,99 @@ fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
 
 @Composable
 fun FiltersSection() {
-    Column(
+    val categoryOptions = listOf("All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other")
+    var selectedCategory by remember { mutableStateOf(categoryOptions.first()) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+
+    val statusOptions = listOf("All Status", "Pending", "In Progress", "Resolved")
+    var selectedStatus by remember { mutableStateOf(statusOptions.first()) }
+    var statusExpanded by remember { mutableStateOf(false) }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedTextField(
-            value = "",
-            onValueChange = {},
-            placeholder = { Text("Search reports...") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            singleLine = true
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip("All Categories")
-            FilterChip("All Status")
+        // Category Dropdown (compact)
+        Box {
+            OutlinedTextField(
+                value = selectedCategory,
+                onValueChange = {},
+                modifier = Modifier
+                    .widthIn(min = 150.dp, max = 180.dp)
+                    .clickable { categoryExpanded = true },
+                readOnly = true,
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = "Category Dropdown",
+                        tint = Color.Gray
+                    )
+                },
+                singleLine = true
+            )
+            DropdownMenu(
+                expanded = categoryExpanded,
+                onDismissRequest = { categoryExpanded = false }
+            ) {
+                categoryOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            selectedCategory = option
+                            categoryExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { categoryExpanded = true }
+                    .background(Color.Transparent)
+            )
         }
-    }
-}
-
-@Composable
-fun FilterChip(text: String) {
-    Surface(
-        shape = CircleShape,
-        color = Color(0xFFF3F3F3)
-    ) {
-        Text(
-            text = text,
-            color = Color.Black,
-            modifier = Modifier
-                .padding(horizontal = 18.dp, vertical = 8.dp),
-            fontSize = 14.sp
-        )
+        // Status Dropdown (compact)
+        Box {
+            OutlinedTextField(
+                value = selectedStatus,
+                onValueChange = {},
+                modifier = Modifier
+                    .widthIn(min = 120.dp, max = 150.dp)
+                    .clickable { statusExpanded = true },
+                readOnly = true,
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = "Status Dropdown",
+                        tint = Color.Gray
+                    )
+                },
+                singleLine = true
+            )
+            DropdownMenu(
+                expanded = statusExpanded,
+                onDismissRequest = { statusExpanded = false }
+            ) {
+                statusOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            selectedStatus = option
+                            statusExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { statusExpanded = true }
+                    .background(Color.Transparent)
+            )
+        }
     }
 }
 
