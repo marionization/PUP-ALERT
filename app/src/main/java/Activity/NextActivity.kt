@@ -38,6 +38,10 @@ class NextActivity : ComponentActivity() {
         val role = intent.getStringExtra("role") ?: "Administrator"
         setContent {
             SeriousModeTheme {
+                var selectedTab by remember { mutableStateOf(0) }
+                val tabs = listOf("All", "Pending", "In Progress", "Resolved")
+                val currentStatus = tabs[selectedTab]
+
                 Scaffold(
                     floatingActionButton = {
                         FloatingActionButton(
@@ -67,8 +71,10 @@ class NextActivity : ComponentActivity() {
                             }
                         )
                         FiltersSection()
-                        StatusTabs()
-                        ReportList()
+                        StatusTabs(selectedTab, tabs) { selectedTab = it }
+                        ReportList(
+                            selectedStatus = currentStatus
+                        )
                     }
                 }
             }
@@ -77,7 +83,8 @@ class NextActivity : ComponentActivity() {
 }
 
 @Composable
-fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
+fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) { /* ... Same as before ... */
+    // (Use your previous TopHeader code block here)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -125,7 +132,7 @@ fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
 }
 
 @Composable
-fun FiltersSection() {
+fun FiltersSection() { /* ... Same as before ... */
     val categoryOptions = listOf("All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other")
     var selectedCategory by remember { mutableStateOf(categoryOptions.first()) }
     var categoryExpanded by remember { mutableStateOf(false) }
@@ -211,9 +218,7 @@ fun FiltersSection() {
 }
 
 @Composable
-fun StatusTabs() {
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("All", "Pending", "In Progress", "Resolved")
+fun StatusTabs(selectedTab: Int, tabs: List<String>, onTabSelected: (Int) -> Unit) {
     ScrollableTabRow(
         selectedTabIndex = selectedTab,
         edgePadding = 0.dp,
@@ -230,7 +235,7 @@ fun StatusTabs() {
         tabs.forEachIndexed { i, title ->
             Tab(
                 selected = selectedTab == i,
-                onClick = { selectedTab = i },
+                onClick = { onTabSelected(i) },
                 text = {
                     Text(
                         title,
@@ -244,14 +249,21 @@ fun StatusTabs() {
 }
 
 @Composable
-fun ReportList() {
-    val reports = ReportRepository.reports
+fun ReportList(selectedStatus: String) {
+    val allReports = ReportRepository.reports
+    val filteredReports = when (selectedStatus) {
+        "All" -> allReports
+        "Pending" -> allReports.filter { it.status == "Pending" }
+        "In Progress" -> allReports.filter { it.status == "In Progress" }
+        "Resolved" -> allReports.filter { it.status == "Resolved" }
+        else -> allReports
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        items(reports) { report ->
+        items(filteredReports) { report ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -284,7 +296,18 @@ fun ReportList() {
                         }
                     }
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(report.title, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(report.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            // Status chip
+                            Text(
+                                report.status,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .background(Color(0xFFE1001B), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                         Spacer(Modifier.height(4.dp))
                         Text(
                             report.category,
@@ -296,7 +319,7 @@ fun ReportList() {
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(report.location, fontSize = 12.sp, color = Color.Gray)
-                        // Here you can add additional info: status, date, reporter, etc
+                        // You can add more info here if needed
                     }
                 }
             }

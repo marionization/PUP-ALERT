@@ -8,8 +8,10 @@ data class Report(
     val category: String,
     val location: String,
     val description: String,
-    val imageUri: Uri?
+    val imageUri: Uri?,
+    val status: String = "Pending" // Add this default value
 )
+
 
 object ReportRepository {
     val reports = mutableStateListOf<Report>()
