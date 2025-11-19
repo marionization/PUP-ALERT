@@ -1,6 +1,7 @@
 package Activity
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,18 +10,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import Activity.ui.theme.SeriousModeTheme
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 
@@ -61,7 +68,7 @@ class NextActivity : ComponentActivity() {
                         )
                         FiltersSection()
                         StatusTabs()
-                        // Add the rest of your content here
+                        ReportList()
                     }
                 }
             }
@@ -166,12 +173,6 @@ fun FiltersSection() {
                     )
                 }
             }
-            Spacer(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable { categoryExpanded = true }
-                    .background(Color.Transparent)
-            )
         }
         // Status Dropdown (compact)
         Box {
@@ -205,12 +206,6 @@ fun FiltersSection() {
                     )
                 }
             }
-            Spacer(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable { statusExpanded = true }
-                    .background(Color.Transparent)
-            )
         }
     }
 }
@@ -244,6 +239,67 @@ fun StatusTabs() {
                     )
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun ReportList() {
+    val reports = ReportRepository.reports
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        items(reports) { report ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(3.dp)
+            ) {
+                Column {
+                    if (report.imageUri != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(report.imageUri),
+                            contentDescription = "Report Image",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CameraAlt,
+                                contentDescription = null,
+                                modifier = Modifier.size(54.dp),
+                                tint = Color.LightGray
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(report.title, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            report.category,
+                            color = Color(0xFFE1001B),
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .background(Color(0xFFFDECEC), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(report.location, fontSize = 12.sp, color = Color.Gray)
+                        // Here you can add additional info: status, date, reporter, etc
+                    }
+                }
+            }
         }
     }
 }
