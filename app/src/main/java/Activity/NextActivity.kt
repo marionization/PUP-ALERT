@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import Activity.ui.theme.SeriousModeTheme
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 
 class NextActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,15 +51,17 @@ class NextActivity : ComponentActivity() {
 
                 Scaffold(
                     floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = {
-                                val intent = Intent(this@NextActivity, SubmitReportActivity::class.java)
-                                startActivity(intent)
-                            },
-                            containerColor = Color(0xFFE1001B),
-                            shape = CircleShape
-                        ) {
-                            Text("+", color = Color.White, fontSize = 28.sp)
+                        if (role != "Administrator") {
+                            FloatingActionButton(
+                                onClick = {
+                                    val intent = Intent(this@NextActivity, SubmitReportActivity::class.java)
+                                    startActivity(intent)
+                                },
+                                containerColor = Color(0xFFE1001B),
+                                shape = CircleShape
+                            ) {
+                                Text("+", color = Color.White, fontSize = 28.sp)
+                            }
                         }
                     }
                 ) { innerPadding ->
@@ -80,7 +86,8 @@ class NextActivity : ComponentActivity() {
                         StatusTabs(selectedTab, tabs) { selectedTab = it }
                         ReportList(
                             selectedStatus = currentStatus,
-                            selectedCategory = selectedCategory
+                            selectedCategory = selectedCategory,
+                            currentRole = role
                         )
                     }
                 }
@@ -142,7 +149,9 @@ fun FiltersSection(
     selectedCategory: String,
     onCategorySelected: (String) -> Unit
 ) {
-    val categoryOptions = listOf("All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other")
+    val categoryOptions = listOf(
+        "All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other"
+    )
     var categoryExpanded by remember { mutableStateOf(false) }
 
     Row(
@@ -158,7 +167,6 @@ fun FiltersSection(
             tint = Color(0xFFE1001B)
         )
         Spacer(Modifier.width(8.dp))
-
         Box {
             OutlinedTextField(
                 value = selectedCategory,
@@ -176,7 +184,6 @@ fun FiltersSection(
                 shape = RoundedCornerShape(10.dp),
                 singleLine = true
             )
-            // Full-size clickable overlay to ensure reliable dropdown opening
             Box(
                 Modifier
                     .matchParentSize()
@@ -246,7 +253,12 @@ fun StatusTabs(selectedTab: Int, tabs: List<String>, onTabSelected: (Int) -> Uni
 }
 
 @Composable
-fun ReportList(selectedStatus: String, selectedCategory: String) {
+fun ReportList(
+    selectedStatus: String,
+    selectedCategory: String,
+    currentRole: String
+) {
+    val context = LocalContext.current
     val allReports = ReportRepository.reports
     val filteredReports = allReports.filter { report ->
         (selectedStatus == "All" || report.status == selectedStatus) &&
@@ -258,27 +270,47 @@ fun ReportList(selectedStatus: String, selectedCategory: String) {
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         items(filteredReports) { report ->
+            val statusColor = when (report.status) {
+                "Resolved" -> Color(0xFF17B169)
+                "In Progress" -> Color(0xFFFFC107)
+                else -> Color(0xFFE1001B)
+            }
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .clickable {
+                        val intent = Intent(context, ReportDetailActivity::class.java).apply {
+                            putExtra("role", currentRole)
+                            putExtra("title", report.title)
+                            putExtra("category", report.category)
+                            putExtra("location", report.location)
+                            putExtra("description", report.description)
+                            putExtra("imageUri", report.imageUri?.toString())
+                            putExtra("status", report.status)
+                            putExtra("dateSubmitted", report.dateSubmitted)
+                            putExtra("reporter", report.reporter)
+                        }
+                        context.startActivity(intent)
+                    },
                 shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(3.dp)
             ) {
-                Column {
+                Column(Modifier.fillMaxWidth()) {
                     if (report.imageUri != null) {
                         Image(
                             painter = rememberAsyncImagePainter(report.imageUri),
                             contentDescription = "Report Image",
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(130.dp)
+                                .height(180.dp),
+                            contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(130.dp),
+                                .height(180.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -292,13 +324,12 @@ fun ReportList(selectedStatus: String, selectedCategory: String) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(report.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            // Status chip
                             Text(
                                 report.status,
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 modifier = Modifier
-                                    .background(Color(0xFFE1001B), RoundedCornerShape(6.dp))
+                                    .background(statusColor, RoundedCornerShape(6.dp))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -312,7 +343,47 @@ fun ReportList(selectedStatus: String, selectedCategory: String) {
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text(report.location, fontSize = 12.sp, color = Color.Gray)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.LocationOn,
+                                contentDescription = "Location",
+                                modifier = Modifier.size(15.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                report.location,
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Filled.CalendarToday,
+                                contentDescription = "Date",
+                                modifier = Modifier.size(15.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                report.dateSubmitted,
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "Reporter",
+                                modifier = Modifier.size(15.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                report.reporter,
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }

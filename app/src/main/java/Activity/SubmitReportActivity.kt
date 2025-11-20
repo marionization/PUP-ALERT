@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
@@ -28,6 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import Activity.ui.theme.SeriousModeTheme
+import java.text.SimpleDateFormat
+import java.util.*
+import Activity.Report
+import Activity.ReportRepository
 
 class SubmitReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,10 +62,13 @@ fun SubmitReportScreen(
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
+    var reporterName by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         imageUri = uri
     }
+
+    val scrollState = rememberScrollState()
 
     val categories = listOf(
         "Facilities",
@@ -73,6 +82,7 @@ fun SubmitReportScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(24.dp)
     ) {
         Text(
@@ -102,9 +112,7 @@ fun SubmitReportScreen(
             OutlinedTextField(
                 value = if (selectedCategory.isEmpty()) "" else selectedCategory,
                 onValueChange = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { categoryExpanded = true },
+                modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
                 enabled = false,
                 placeholder = { Text("Select a category", color = Color.Gray) },
@@ -146,7 +154,42 @@ fun SubmitReportScreen(
             )
         }
 
-        // ---- Upload Image Section with Undo Button ----
+        Text("Reporter Name *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+        OutlinedTextField(
+            value = reporterName,
+            onValueChange = { reporterName = it },
+            placeholder = { Text("Enter your name") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 14.dp)
+        )
+
+        Text("Location *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+        OutlinedTextField(
+            value = location,
+            onValueChange = { location = it },
+            placeholder = { Text("e.g., Building A, Room 301") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 14.dp)
+        )
+
+        Text("Description *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            placeholder = { Text("Describe the issue in detail...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(90.dp)
+                .padding(bottom = 14.dp),
+            maxLines = 4
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         Text("Upload Image", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
         Box(
             modifier = Modifier
@@ -194,39 +237,13 @@ fun SubmitReportScreen(
                 }
             }
         }
-        // ---- end upload image section ----
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Text("Location *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
-        OutlinedTextField(
-            value = location,
-            onValueChange = { location = it },
-            placeholder = { Text("e.g., Building A, Room 301") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 14.dp)
-        )
-
-        Text("Description *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            placeholder = { Text("Describe the issue in detail...") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(90.dp)
-                .padding(bottom = 14.dp),
-            maxLines = 4
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 18.dp, bottom = 8.dp),
+                .padding(top = 12.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             OutlinedButton(
@@ -241,13 +258,17 @@ fun SubmitReportScreen(
             }
             Button(
                 onClick = {
+                    val currentDate = SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(Date())
                     ReportRepository.reports.add(
                         Report(
                             reportTitle,
                             selectedCategory,
                             location,
                             description,
-                            imageUri
+                            imageUri, // Store as Uri, not String!
+                            "Pending",
+                            currentDate,
+                            reporterName
                         )
                     )
                     onCancel()

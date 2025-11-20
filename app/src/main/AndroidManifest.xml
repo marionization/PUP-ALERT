@@ -23,6 +23,12 @@
             android:theme="@style/Theme.SeriousMode" />
 
         <activity
+            android:name="Activity.ReportDetailActivity"
+            android:exported="false"
+            android:label="Report Details"
+            android:theme="@style/Theme.SeriousMode" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true" >
             <intent-filter>
