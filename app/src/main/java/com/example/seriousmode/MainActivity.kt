@@ -10,6 +10,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var roleRadioGroup: RadioGroup
     private lateinit var signInButton: Button
 
+    // Separate credentials for student and admin
+    private val studentEmail = "jonerickjamesvimperial@iskolarngbayan.pup.edu.ph"
+    private val studentPassword = "dikoalam@2"
+
+    private val adminEmail = "admin"
+    private val adminPassword = "admin01"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -30,20 +37,21 @@ class MainActivity : AppCompatActivity() {
         signInButton.setOnClickListener {
             val email = emailEditText.text.toString()
             val password = passwordEditText.text.toString()
-            if (
-                email == "jonerickjamesvimperial@iskolamgbayan.pup.edu.ph" &&
-                password == "dikoalam@2"
-            ) {
-                Toast.makeText(this, "Demo login successful!", Toast.LENGTH_SHORT).show()
+            val selectedRole = if (roleRadioGroup.checkedRadioButtonId == R.id.radioStudent) {
+                "Student"
+            } else {
+                "Administrator"
+            }
 
-                // Determine the selected role from the radio group
-                val selectedRole = if (roleRadioGroup.checkedRadioButtonId == R.id.radioStudent) {
-                    "Student"
-                } else {
-                    "Administrator"
-                }
+            // Role-specific credential check
+            val isValidLogin = when (selectedRole) {
+                "Student" -> (email == studentEmail && password == studentPassword)
+                "Administrator" -> (email == adminEmail && password == adminPassword)
+                else -> false
+            }
 
-                // Pass the role to NextActivity using intent
+            if (isValidLogin) {
+                Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
                 val intent = Intent(this, NextActivity::class.java)
                 intent.putExtra("role", selectedRole)
                 startActivity(intent)

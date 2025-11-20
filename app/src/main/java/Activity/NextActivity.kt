@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +42,7 @@ class NextActivity : ComponentActivity() {
             SeriousModeTheme {
                 var selectedTab by remember { mutableStateOf(0) }
                 val tabs = listOf("All", "Pending", "In Progress", "Resolved")
+                var selectedCategory by remember { mutableStateOf("All Categories") }
                 val currentStatus = tabs[selectedTab]
 
                 Scaffold(
@@ -70,10 +73,14 @@ class NextActivity : ComponentActivity() {
                                 finish()
                             }
                         )
-                        FiltersSection()
+                        FiltersSection(
+                            selectedCategory = selectedCategory,
+                            onCategorySelected = { selectedCategory = it }
+                        )
                         StatusTabs(selectedTab, tabs) { selectedTab = it }
                         ReportList(
-                            selectedStatus = currentStatus
+                            selectedStatus = currentStatus,
+                            selectedCategory = selectedCategory
                         )
                     }
                 }
@@ -83,8 +90,7 @@ class NextActivity : ComponentActivity() {
 }
 
 @Composable
-fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) { /* ... Same as before ... */
-    // (Use your previous TopHeader code block here)
+fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -132,30 +138,33 @@ fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) { /* ..
 }
 
 @Composable
-fun FiltersSection() { /* ... Same as before ... */
+fun FiltersSection(
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit
+) {
     val categoryOptions = listOf("All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other")
-    var selectedCategory by remember { mutableStateOf(categoryOptions.first()) }
     var categoryExpanded by remember { mutableStateOf(false) }
-
-    val statusOptions = listOf("All Status", "Pending", "In Progress", "Resolved")
-    var selectedStatus by remember { mutableStateOf(statusOptions.first()) }
-    var statusExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Category Dropdown (compact)
+        Icon(
+            imageVector = Icons.Filled.FilterList,
+            contentDescription = "Filter",
+            modifier = Modifier.size(24.dp),
+            tint = Color(0xFFE1001B)
+        )
+        Spacer(Modifier.width(8.dp))
+
         Box {
             OutlinedTextField(
                 value = selectedCategory,
                 onValueChange = {},
                 modifier = Modifier
-                    .widthIn(min = 150.dp, max = 180.dp)
-                    .clickable { categoryExpanded = true },
+                    .widthIn(min = 160.dp, max = 200.dp),
                 readOnly = true,
                 trailingIcon = {
                     Icon(
@@ -164,7 +173,15 @@ fun FiltersSection() { /* ... Same as before ... */
                         tint = Color.Gray
                     )
                 },
+                shape = RoundedCornerShape(10.dp),
                 singleLine = true
+            )
+            // Full-size clickable overlay to ensure reliable dropdown opening
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent)
+                    .clickable { categoryExpanded = true }
             )
             DropdownMenu(
                 expanded = categoryExpanded,
@@ -172,43 +189,23 @@ fun FiltersSection() { /* ... Same as before ... */
             ) {
                 categoryOptions.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option) },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(option)
+                                if (selectedCategory == option) {
+                                    Spacer(Modifier.weight(1f))
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = "Selected",
+                                        tint = Color(0xFFE1001B),
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
+                        },
                         onClick = {
-                            selectedCategory = option
+                            onCategorySelected(option)
                             categoryExpanded = false
-                        }
-                    )
-                }
-            }
-        }
-        // Status Dropdown (compact)
-        Box {
-            OutlinedTextField(
-                value = selectedStatus,
-                onValueChange = {},
-                modifier = Modifier
-                    .widthIn(min = 120.dp, max = 150.dp)
-                    .clickable { statusExpanded = true },
-                readOnly = true,
-                trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown,
-                        contentDescription = "Status Dropdown",
-                        tint = Color.Gray
-                    )
-                },
-                singleLine = true
-            )
-            DropdownMenu(
-                expanded = statusExpanded,
-                onDismissRequest = { statusExpanded = false }
-            ) {
-                statusOptions.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            selectedStatus = option
-                            statusExpanded = false
                         }
                     )
                 }
@@ -249,14 +246,11 @@ fun StatusTabs(selectedTab: Int, tabs: List<String>, onTabSelected: (Int) -> Uni
 }
 
 @Composable
-fun ReportList(selectedStatus: String) {
+fun ReportList(selectedStatus: String, selectedCategory: String) {
     val allReports = ReportRepository.reports
-    val filteredReports = when (selectedStatus) {
-        "All" -> allReports
-        "Pending" -> allReports.filter { it.status == "Pending" }
-        "In Progress" -> allReports.filter { it.status == "In Progress" }
-        "Resolved" -> allReports.filter { it.status == "Resolved" }
-        else -> allReports
+    val filteredReports = allReports.filter { report ->
+        (selectedStatus == "All" || report.status == selectedStatus) &&
+                (selectedCategory == "All Categories" || report.category == selectedCategory)
     }
     LazyColumn(
         modifier = Modifier
@@ -319,7 +313,6 @@ fun ReportList(selectedStatus: String) {
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(report.location, fontSize = 12.sp, color = Color.Gray)
-                        // You can add more info here if needed
                     }
                 }
             }
