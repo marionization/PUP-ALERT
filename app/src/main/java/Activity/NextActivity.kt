@@ -83,8 +83,8 @@ class NextActivity : ComponentActivity() {
                     ) {
                         TopHeader(
                             role = role,
-                            userName = if (role == "Student") userName else "",
-                            studentId = if (role == "Student") studentId else "",
+                            userName = userName,
+                            studentId = studentId,
                             onLogout = {
                                 val intent = Intent(
                                     this@NextActivity,
