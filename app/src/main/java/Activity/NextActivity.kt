@@ -41,7 +41,14 @@ class NextActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         val role = intent.getStringExtra("role") ?: "Administrator"
+
+        // Load name and student number saved from RegisterActivity
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val userName = prefs.getString("user_name", "Student") ?: "Student"
+        val studentId = prefs.getString("student_id", "") ?: ""
+
         setContent {
             SeriousModeTheme {
                 var selectedTab by remember { mutableStateOf(0) }
@@ -54,7 +61,10 @@ class NextActivity : ComponentActivity() {
                         if (role != "Administrator") {
                             FloatingActionButton(
                                 onClick = {
-                                    val intent = Intent(this@NextActivity, SubmitReportActivity::class.java)
+                                    val intent = Intent(
+                                        this@NextActivity,
+                                        SubmitReportActivity::class.java
+                                    )
                                     startActivity(intent)
                                 },
                                 containerColor = Color(0xFFE1001B),
@@ -73,8 +83,13 @@ class NextActivity : ComponentActivity() {
                     ) {
                         TopHeader(
                             role = role,
+                            userName = if (role == "Student") userName else "",
+                            studentId = if (role == "Student") studentId else "",
                             onLogout = {
-                                val intent = Intent(this@NextActivity, com.example.seriousmode.MainActivity::class.java)
+                                val intent = Intent(
+                                    this@NextActivity,
+                                    com.example.seriousmode.MainActivity::class.java
+                                )
                                 startActivity(intent)
                                 finish()
                             }
@@ -97,7 +112,12 @@ class NextActivity : ComponentActivity() {
 }
 
 @Composable
-fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
+fun TopHeader(
+    role: String = "Administrator",
+    userName: String = "",
+    studentId: String = "",
+    onLogout: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,10 +131,22 @@ fun TopHeader(role: String = "Administrator", onLogout: () -> Unit = {}) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Person, contentDescription = role, tint = Color.White)
-                Spacer(Modifier.width(6.dp))
-                Text(role, color = Color.White, fontSize = 15.sp)
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Person, contentDescription = role, tint = Color.White)
+                    Spacer(Modifier.width(6.dp))
+                    Text(role, color = Color.White, fontSize = 15.sp)
+                }
+                if (userName.isNotBlank()) {
+                    Text(userName, color = Color.White, fontSize = 14.sp)
+                }
+                if (studentId.isNotBlank()) {
+                    Text(
+                        studentId,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 12.sp
+                    )
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -150,7 +182,8 @@ fun FiltersSection(
     onCategorySelected: (String) -> Unit
 ) {
     val categoryOptions = listOf(
-        "All Categories", "Facilities", "Maintenance", "Safety", "Cleanliness", "Equipment", "Other"
+        "All Categories", "Facilities", "Maintenance",
+        "Safety", "Cleanliness", "Equipment", "Other"
     )
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -280,17 +313,18 @@ fun ReportList(
                     .fillMaxWidth()
                     .padding(vertical = 6.dp)
                     .clickable {
-                        val intent = Intent(context, ReportDetailActivity::class.java).apply {
-                            putExtra("role", currentRole)
-                            putExtra("title", report.title)
-                            putExtra("category", report.category)
-                            putExtra("location", report.location)
-                            putExtra("description", report.description)
-                            putExtra("imageUri", report.imageUri?.toString())
-                            putExtra("status", report.status)
-                            putExtra("dateSubmitted", report.dateSubmitted)
-                            putExtra("reporter", report.reporter)
-                        }
+                        val intent =
+                            Intent(context, ReportDetailActivity::class.java).apply {
+                                putExtra("role", currentRole)
+                                putExtra("title", report.title)
+                                putExtra("category", report.category)
+                                putExtra("location", report.location)
+                                putExtra("description", report.description)
+                                putExtra("imageUri", report.imageUri?.toString())
+                                putExtra("status", report.status)
+                                putExtra("dateSubmitted", report.dateSubmitted)
+                                putExtra("reporter", report.reporter)
+                            }
                         context.startActivity(intent)
                     },
                 shape = RoundedCornerShape(12.dp),
@@ -323,7 +357,11 @@ fun ReportList(
                     }
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(report.title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Text(
+                                report.title,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
                             Text(
                                 report.status,
                                 color = Color.White,

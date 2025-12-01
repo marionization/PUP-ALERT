@@ -34,6 +34,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import Activity.Report
 import Activity.ReportRepository
+import androidx.compose.ui.platform.LocalContext
 
 class SubmitReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,16 +58,23 @@ class SubmitReportActivity : ComponentActivity() {
 fun SubmitReportScreen(
     onCancel: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    // load saved user name from SharedPreferences
+    val prefs = context.getSharedPreferences("user_prefs", ComponentActivity.MODE_PRIVATE)
+    val reporterName = prefs.getString("user_name", "Student") ?: "Student"
+
     var reportTitle by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
-    var reporterName by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        imageUri = uri
-    }
+
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            imageUri = uri
+        }
 
     val scrollState = rememberScrollState()
 
@@ -154,12 +162,12 @@ fun SubmitReportScreen(
             )
         }
 
-        Text("Reporter Name *", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+        // Reporter name label (read only, from registration)
+        Text("Reporter", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(
             value = reporterName,
-            onValueChange = { reporterName = it },
-            placeholder = { Text("Enter your name") },
-            singleLine = true,
+            onValueChange = {},
+            enabled = false,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 14.dp)
@@ -258,17 +266,18 @@ fun SubmitReportScreen(
             }
             Button(
                 onClick = {
-                    val currentDate = SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(Date())
+                    val currentDate =
+                        SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(Date())
                     ReportRepository.reports.add(
                         Report(
                             reportTitle,
                             selectedCategory,
                             location,
                             description,
-                            imageUri, // Store as Uri, not String!
+                            imageUri,
                             "Pending",
                             currentDate,
-                            reporterName
+                            reporterName  // comes from registration
                         )
                     )
                     onCancel()
