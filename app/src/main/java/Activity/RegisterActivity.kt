@@ -1,16 +1,27 @@
-package com.example.seriousmode
+package Activity
 
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.seriousmode.R
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+
 
 class RegisterActivity : AppCompatActivity() {
+
+    private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_register)
+
+        // Firebase instances
+        auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
 
         val nameEditText = findViewById<EditText>(R.id.editTextName)
         val emailEditText = findViewById<EditText>(R.id.editTextEmail)
@@ -68,16 +79,45 @@ class RegisterActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // Save name and student number
-            val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-            prefs.edit()
-                .putString("user_name", name)
-                .putString("student_id", studentId)
-                .apply()
+            // Create user in Firebase Authentication
+            auth.createUserWithEmailAndPassword(email, password)
+                .addOnSuccessListener { result ->
+                    val uid = result.user?.uid
 
-            // TODO save new user in your backend or Firebase
-            Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
-            finish()  // go back to login
+                    if (uid == null) {
+                        Toast.makeText(this, "Registration failed, try again", Toast.LENGTH_SHORT).show()
+                        return@addOnSuccessListener
+                    }
+
+                    // Save profile in Firestore
+                    val userData = mapOf(
+                        "name" to name,
+                        "email" to email,
+                        "studentId" to studentId,
+                        "role" to "Student"
+                    )
+
+                    db.collection("users")
+                        .document(uid)
+                        .set(userData)
+                        .addOnSuccessListener {
+                            // also keep using SharedPreferences for your header
+                            val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("user_name", name)
+                                .putString("student_id", studentId)
+                                .apply()
+
+                            Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
+                            finish() // back to login
+                        }
+                        .addOnFailureListener { e ->
+                            Toast.makeText(this, "Failed to save profile: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Registration failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 }
