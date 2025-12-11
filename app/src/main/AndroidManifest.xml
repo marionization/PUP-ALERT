@@ -29,9 +29,15 @@
             android:theme="@style/Theme.SeriousMode" />
 
         <activity
-            android:name=".RegisterActivity"
+            android:name="Activity.RegisterActivity"
             android:exported="false"
             android:label="Register"
+            android:theme="@style/Theme.SeriousMode" />
+
+        <activity
+            android:name="Activity.ForgotPasswordActivity"
+            android:exported="false"
+            android:label="Forgot Password"
             android:theme="@style/Theme.SeriousMode" />
 
         <activity

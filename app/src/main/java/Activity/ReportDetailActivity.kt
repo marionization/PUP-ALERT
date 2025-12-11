@@ -2,6 +2,7 @@ package Activity
 
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -14,24 +15,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import Activity.ui.theme.SeriousModeTheme
-import Activity.ReportRepository
-import Activity.Review
-import Activity.ReviewRepository
+import com.google.firebase.firestore.FirebaseFirestore
+import androidx.compose.foundation.border
 
 class ReportDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,10 +49,8 @@ class ReportDetailActivity : ComponentActivity() {
         val status = intent.getStringExtra("status") ?: ""
         val dateSubmitted = intent.getStringExtra("dateSubmitted") ?: ""
         val reporter = intent.getStringExtra("reporter") ?: ""
+        val reportId = intent.getStringExtra("id") ?: ""
         val imageUri = if (!imageUriStr.isNullOrEmpty()) Uri.parse(imageUriStr) else null
-
-        // Get live reference to the report instance
-        val report = ReportRepository.reports.find { it.title == title }
 
         setContent {
             SeriousModeTheme {
@@ -59,11 +61,11 @@ class ReportDetailActivity : ComponentActivity() {
                     location = location,
                     description = description,
                     imageUri = imageUri,
-                    report = report,
                     status = status,
                     dateSubmitted = dateSubmitted,
                     reporter = reporter,
-                    isAdmin = role == "Administrator"
+                    isAdmin = role == "Administrator",
+                    reportId = reportId
                 )
             }
         }
@@ -79,61 +81,73 @@ fun ReportDetailScreen(
     location: String,
     description: String,
     imageUri: Uri?,
-    report: Report?, // Reference to updatable report object
     status: String,
     dateSubmitted: String,
     reporter: String,
-    isAdmin: Boolean = false
+    isAdmin: Boolean = false,
+    reportId: String
 ) {
-    var newRating by remember { mutableStateOf(1) }
-    var newReviewText by remember { mutableStateOf("") }
-    val reviews = remember { mutableStateListOf<Review>() }
-    var selectedStatus by remember { mutableStateOf(report?.status ?: status) }
+    val context = LocalContext.current
+    val db = FirebaseFirestore.getInstance()
+    var selectedStatus by remember { mutableStateOf(status) }
     val statusOptions = listOf("Pending", "In Progress", "Resolved")
     var statusDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Reviews State
+    var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
+    var userReviewText by remember { mutableStateOf("") }
+    var userRating by remember { mutableIntStateOf(5) }
+
+    // Load Reviews
+    LaunchedEffect(reportId) {
+        if (reportId.isNotEmpty()) {
+            db.collection("reports").document(reportId).collection("reviews")
+                .addSnapshotListener { snapshot, e ->
+                    if (snapshot != null) {
+                        val loadedReviews = snapshot.documents.map { doc ->
+                            Review(
+                                id = doc.id,
+                                rating = (doc.getLong("rating") ?: 5).toInt(),
+                                text = doc.getString("text") ?: "",
+                                likes = (doc.getLong("likes") ?: 0).toInt(),
+                                dislikes = (doc.getLong("dislikes") ?: 0).toInt(),
+                                adminLiked = doc.getBoolean("adminLiked") ?: false
+                            )
+                        }
+                        reviews = loadedReviews
+                    }
+                }
+        }
+    }
+
+    // Check if the report should be auto-deleted (2 hours after resolution)
+    LaunchedEffect(selectedStatus, reportId) {
+        if (selectedStatus == "Resolved" && reportId.isNotEmpty()) {
+            db.collection("reports").document(reportId).get()
+                .addOnSuccessListener { document ->
+                    if (document.exists()) {
+                        val resolvedTimestamp = document.getLong("resolvedTimestamp") ?: 0L
+                        if (resolvedTimestamp > 0) {
+                            val currentTime = System.currentTimeMillis()
+                            val twoHoursInMillis = 2 * 60 * 60 * 1000 // 2 hours
+                            if (currentTime - resolvedTimestamp > twoHoursInMillis) {
+                                db.collection("reports").document(reportId).delete()
+                                    .addOnSuccessListener {
+                                        Toast.makeText(context, "Resolved report auto-deleted", Toast.LENGTH_LONG).show()
+                                        onBackClick()
+                                    }
+                            }
+                        }
+                    }
+                }
+        }
+    }
 
     // Color badge based on current status
     val statusColor = when(selectedStatus) {
         "Resolved" -> Color(0xFF17B169)
         "In Progress" -> Color(0xFFFFC107)
         else -> Color(0xFFE1001B)
-    }
-
-    // Keep selectedStatus synced to the report object's status
-    LaunchedEffect(report?.status) {
-        if (report?.status != selectedStatus) {
-            selectedStatus = report?.status ?: status
-        }
-    }
-
-    LaunchedEffect(title) {
-        val sharedList = ReviewRepository.reviewsByReport.getOrPut(title) { mutableListOf() }
-        reviews.clear()
-        reviews.addAll(sharedList)
-    }
-
-    fun addReview(review: Review) {
-        val sharedList = ReviewRepository.reviewsByReport.getOrPut(title) { mutableListOf() }
-        sharedList.add(review)
-        reviews.add(review)
-    }
-
-    fun likeReview(index: Int) {
-        val sharedList = ReviewRepository.reviewsByReport[title]
-        sharedList?.get(index)?.likes = sharedList?.get(index)?.likes?.plus(1) ?: 1
-        reviews[index] = reviews[index].copy(likes = reviews[index].likes + 1)
-    }
-
-    fun dislikeReview(index: Int) {
-        val sharedList = ReviewRepository.reviewsByReport[title]
-        sharedList?.get(index)?.dislikes = sharedList?.get(index)?.dislikes?.plus(1) ?: 1
-        reviews[index] = reviews[index].copy(dislikes = reviews[index].dislikes + 1)
-    }
-
-    fun adminLikeReview(index: Int) {
-        val sharedList = ReviewRepository.reviewsByReport[title]
-        sharedList?.get(index)?.adminLiked = true
-        reviews[index] = reviews[index].copy(adminLiked = true)
     }
 
     Column(
@@ -222,7 +236,7 @@ fun ReportDetailScreen(
             }
         }
 
-        if (isAdmin && report != null) {
+        if (isAdmin && reportId.isNotEmpty()) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -269,9 +283,28 @@ fun ReportDetailScreen(
                                 DropdownMenuItem(
                                     text = { Text(option) },
                                     onClick = {
-                                        selectedStatus = option
-                                        statusDropdownExpanded = false
-                                        report.status = option
+                                        if (selectedStatus != option) {
+                                            selectedStatus = option
+                                            statusDropdownExpanded = false
+                                            
+                                            val updates = hashMapOf<String, Any>("status" to option)
+                                            if (option == "Resolved") {
+                                                updates["resolvedTimestamp"] = System.currentTimeMillis()
+                                            } else {
+                                                updates["resolvedTimestamp"] = 0L
+                                            }
+
+                                            db.collection("reports").document(reportId)
+                                                .update(updates)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(context, "Status updated", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .addOnFailureListener {
+                                                    Toast.makeText(context, "Failed to update status", Toast.LENGTH_SHORT).show()
+                                                }
+                                        } else {
+                                            statusDropdownExpanded = false
+                                        }
                                     }
                                 )
                             }
@@ -281,135 +314,193 @@ fun ReportDetailScreen(
                         "Change the status to keep everyone informed about the progress",
                         color = Color(0xFFE1001B),
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 6.dp, start = 3.dp)
+                        modifier = Modifier.padding(top = 8.dp)
                     )
+
+                    // Delete Button (Only for Resolved)
+                    if (selectedStatus == "Resolved") {
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                db.collection("reports").document(reportId).delete()
+                                    .addOnSuccessListener {
+                                        Toast.makeText(context, "Report Deleted", Toast.LENGTH_SHORT).show()
+                                        onBackClick()
+                                    }
+                                    .addOnFailureListener {
+                                        Toast.makeText(context, "Failed to delete report", Toast.LENGTH_SHORT).show()
+                                    }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Delete Resolved Report")
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-        Card(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Reviews (${reviews.size})", fontWeight = FontWeight.Bold)
-                if (reviews.isEmpty()) {
-                    Text(
-                        "No reviews yet",
-                        color = Color.Gray,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                } else {
-                    reviews.forEachIndexed { reviewIndex, review ->
-                        Column {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-                            ) {
-                                for (i in 1..5) {
-                                    Text(
-                                        text = if (i <= review.rating) "★" else "☆",
-                                        color = if (i <= review.rating) Color(0xFFFFC107) else Color.Gray,
-                                        fontSize = 16.sp
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Text(review.text, fontSize = 13.sp)
-                                if (isAdmin) {
-                                    if (!review.adminLiked) {
-                                        Icon(
-                                            imageVector = Icons.Filled.ThumbUp,
-                                            contentDescription = "Admin Like",
-                                            tint = Color(0xFFE1001B),
-                                            modifier = Modifier
-                                                .size(22.dp)
-                                                .clickable { adminLikeReview(reviewIndex) }
-                                                .padding(horizontal = 6.dp)
-                                        )
-                                    } else {
-                                        Text(
-                                            "admin liked your review",
-                                            color = Color(0xFFE1001B),
-                                            fontSize = 13.sp,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                } else {
-                                    Spacer(Modifier.width(12.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.ThumbUp,
-                                            contentDescription = "Like review",
-                                            tint = if (review.likes > 0) Color(0xFFE1001B) else Color.Gray,
-                                            modifier = Modifier.size(20.dp).clickable { likeReview(reviewIndex) }
-                                        )
-                                        Text("${review.likes}", fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp))
-                                        Icon(
-                                            imageVector = Icons.Filled.ThumbDown,
-                                            contentDescription = "Dislike review",
-                                            tint = if (review.dislikes > 0) Color(0xFFE1001B) else Color.Gray,
-                                            modifier = Modifier.size(20.dp).clickable { dislikeReview(reviewIndex) }
-                                        )
-                                        Text("${review.dislikes}", fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
-                                    }
-                                }
-                            }
-                            if (review.adminLiked && !isAdmin) {
-                                Text(
-                                    "admin liked your review",
-                                    color = Color(0xFFE1001B),
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.padding(start = 32.dp, top = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                Divider(Modifier.padding(vertical = 12.dp))
+        // Reviews Section
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Reviews", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
 
-                Text("Add Your Review", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                    Text("Rating:")
-                    Spacer(Modifier.width(6.dp))
-                    for (i in 1..5) {
-                        Text(
-                            text = if (i <= newRating) "★" else "☆",
-                            fontSize = 24.sp,
-                            color = if (i <= newRating) Color(0xFFFFC107) else Color.Gray,
-                            modifier = Modifier
-                                .padding(end = 2.dp)
-                                .clickable { newRating = i }
-                        )
+            if (reviews.isEmpty()) {
+                Text("No reviews yet.", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+            } else {
+                reviews.forEach { review ->
+                    ReviewItem(
+                        review = review,
+                        isAdmin = isAdmin,
+                        onLikeClick = {
+                            // When admin likes, toggle the adminLiked status in Firestore
+                            if (isAdmin && reportId.isNotEmpty() && review.id.isNotEmpty()) {
+                                db.collection("reports").document(reportId)
+                                    .collection("reviews").document(review.id)
+                                    .update("adminLiked", !review.adminLiked)
+                            }
+                        }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            // Add Review Area
+            Card(
+                shape = RoundedCornerShape(8.dp),
+                elevation = CardDefaults.cardElevation(2.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Leave a Review", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        (1..5).forEach { i ->
+                            Icon(
+                                imageVector = if (i <= userRating) Icons.Filled.Star else Icons.Outlined.Star,
+                                contentDescription = "Star $i",
+                                tint = Color(0xFFFFC107),
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clickable { userRating = i }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = userReviewText,
+                        onValueChange = { userReviewText = it },
+                        placeholder = { Text("Write your feedback...") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        maxLines = 4
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (userReviewText.isNotBlank()) {
+                                val reviewData = hashMapOf(
+                                    "rating" to userRating,
+                                    "text" to userReviewText,
+                                    "likes" to 0,
+                                    "dislikes" to 0,
+                                    "adminLiked" to false,
+                                    "timestamp" to com.google.firebase.Timestamp.now()
+                                )
+                                db.collection("reports").document(reportId).collection("reviews")
+                                    .add(reviewData)
+                                    .addOnSuccessListener {
+                                        userReviewText = ""
+                                        userRating = 5
+                                        Toast.makeText(context, "Review submitted", Toast.LENGTH_SHORT).show()
+                                    }
+                            } else {
+                                Toast.makeText(context, "Please write a comment", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1001B)),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Submit")
                     }
                 }
-                OutlinedTextField(
-                    value = newReviewText,
-                    onValueChange = { newReviewText = it },
-                    placeholder = { Text("Share your thoughts about this report...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = false,
-                    maxLines = 3
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+fun ReviewItem(review: Review, isAdmin: Boolean = false, onLikeClick: () -> Unit = {}) {
+    // Highlight if admin liked
+    val cardColor = if (review.adminLiked) Color(0xFFFFF8E1) else Color(0xFFF9F9FB) // Slight yellow highlight if liked
+    val borderModifier = if (review.adminLiked) Modifier.border(1.dp, Color(0xFFFFC107), RoundedCornerShape(8.dp)) else Modifier
+
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        modifier = Modifier.fillMaxWidth().then(borderModifier)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                repeat(review.rating) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFC107),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                repeat(5 - review.rating) {
+                    Icon(
+                        imageVector = Icons.Outlined.Star,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                if (review.adminLiked) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Admin Liked",
+                        fontSize = 10.sp,
+                        color = Color(0xFFE1001B),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Color(0xFFFDECEC), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(review.text, fontSize = 14.sp)
+            
+            // Likes/Dislikes
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // If admin, this like button toggles adminLiked status
+                // If regular user, it's just a display for now (or regular like)
+                Icon(
+                    imageVector = if(review.adminLiked) Icons.Outlined.ThumbUp else Icons.Outlined.ThumbUp, 
+                    contentDescription = "Like", 
+                    modifier = Modifier.size(14.dp).clickable { if (isAdmin) onLikeClick() }, // Admin can click to toggle "Admin Liked"
+                    tint = if (review.adminLiked) Color(0xFFE1001B) else Color.Gray
                 )
-                Button(
-                    onClick = {
-                        if (newReviewText.isNotBlank()) {
-                            addReview(Review(newRating, newReviewText))
-                            newReviewText = ""
-                            newRating = 1
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1001B))
-                ) {
-                    Text("Submit Review", color = Color.White)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (isAdmin) "Admin Like" else "${review.likes}", // Show text hint for admin
+                    fontSize = 12.sp, 
+                    color = if (review.adminLiked) Color(0xFFE1001B) else Color.Gray
+                )
+                
+                if (!isAdmin) {
+                    Spacer(Modifier.width(16.dp))
+                    Icon(Icons.Outlined.ThumbDown, contentDescription = "Dislike", modifier = Modifier.size(14.dp), tint = Color.Gray)
+                    Spacer(Modifier.width(4.dp))
+                    Text("${review.dislikes}", fontSize = 12.sp, color = Color.Gray)
                 }
             }
         }
