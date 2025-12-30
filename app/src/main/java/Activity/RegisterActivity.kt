@@ -26,6 +26,7 @@ class RegisterActivity : AppCompatActivity() {
         val nameEditText = findViewById<EditText>(R.id.editTextName)
         val emailEditText = findViewById<EditText>(R.id.editTextEmail)
         val studentIdEditText = findViewById<EditText>(R.id.editTextPUP_id)
+        val phoneEditText = findViewById<EditText>(R.id.editTextPhone)
         val passwordEditText = findViewById<EditText>(R.id.editTextPassword)
         val confirmPasswordEditText = findViewById<EditText>(R.id.editTextConfirmPassword)
         val registerButton = findViewById<Button>(R.id.buttonRegister)
@@ -34,12 +35,14 @@ class RegisterActivity : AppCompatActivity() {
             val name = nameEditText.text.toString().trim()
             val email = emailEditText.text.toString().trim()
             val studentId = studentIdEditText.text.toString().trim()
+            val phone = phoneEditText.text.toString().trim()
             val password = passwordEditText.text.toString()
             val confirmPassword = confirmPasswordEditText.text.toString()
 
             if (name.isEmpty() ||
                 email.isEmpty() ||
                 studentId.isEmpty() ||
+                phone.isEmpty() ||
                 password.isEmpty() ||
                 confirmPassword.isEmpty()
             ) {
@@ -94,6 +97,7 @@ class RegisterActivity : AppCompatActivity() {
                         "name" to name,
                         "email" to email,
                         "studentId" to studentId,
+                        "phone" to phone,
                         "role" to "Student"
                     )
 
