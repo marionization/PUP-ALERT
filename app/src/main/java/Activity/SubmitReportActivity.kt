@@ -39,6 +39,8 @@ import java.util.*
 class SubmitReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val reporterName = intent.getStringExtra("reporterName") ?: "Student"
+
         setContent {
             SeriousModeTheme {
                 Surface(
@@ -46,7 +48,8 @@ class SubmitReportActivity : ComponentActivity() {
                     color = Color(0xFFF9F9FB)
                 ) {
                     SubmitReportScreen(
-                        onCancel = { finish() }
+                        onCancel = { finish() },
+                        reporterName = reporterName
                     )
                 }
             }
@@ -56,14 +59,11 @@ class SubmitReportActivity : ComponentActivity() {
 
 @Composable
 fun SubmitReportScreen(
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    reporterName: String
 ) {
     val context = LocalContext.current
     val db = FirebaseFirestore.getInstance()
-
-    // load saved user name from SharedPreferences
-    val prefs = context.getSharedPreferences("user_prefs", ComponentActivity.MODE_PRIVATE)
-    val reporterName = prefs.getString("user_name", "Student") ?: "Student"
 
     var reportTitle by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
