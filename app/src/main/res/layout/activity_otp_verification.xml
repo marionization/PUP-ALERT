@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="#FFF8F9FF">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Enter Verification Code"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="#D32F2F"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/textOtpMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="A 6-digit code was sent to your phone number."
+        android:textSize="14sp"
+        android:textColor="#616161"
+        android:gravity="center"
+        android:layout_marginBottom="24dp" />
+
+    <EditText
+        android:id="@+id/editTextOtp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter OTP"
+        android:inputType="number"
+        android:maxLength="6"
+        android:background="@android:drawable/edit_text"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/buttonVerifyOtp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Verify"
+        android:backgroundTint="#D32F2F"
+        android:textColor="#FFFFFF" />
+
+    <TextView
+        android:id="@+id/textResendCode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Resend Code"
+        android:textColor="#D32F2F"
+        android:textSize="13sp"
+        android:paddingTop="16dp"
+        android:clickable="true"
+        android:focusable="true" />
+
+</LinearLayout>

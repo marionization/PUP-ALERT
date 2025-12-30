@@ -41,6 +41,12 @@
             android:theme="@style/Theme.SeriousMode" />
 
         <activity
+            android:name="Activity.OtpVerificationActivity"
+            android:exported="false"
+            android:label="OTP Verification"
+            android:theme="@style/Theme.SeriousMode" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

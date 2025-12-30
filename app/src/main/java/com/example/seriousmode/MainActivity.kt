@@ -6,9 +6,14 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.firestore.FirebaseFirestore
 import Activity.NextActivity
 import Activity.RegisterActivity
 import Activity.ForgotPasswordActivity
+import Activity.OtpVerificationActivity
+import java.util.concurrent.TimeUnit
+import com.google.firebase.auth.PhoneAuthOptions
 
 class MainActivity : AppCompatActivity() {
 
@@ -17,6 +22,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var registerTextView: TextView
     private lateinit var forgotPasswordTextView: TextView
     private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
 
     // fixed admin credentials (do not change)
     private val adminEmail = "admin"
@@ -27,6 +33,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
 
         roleRadioGroup = findViewById(R.id.radioGroup)
         signInButton = findViewById(R.id.buttonSignIn)
@@ -75,14 +82,25 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                // Student Login via Firebase
+                // Step 1: Sign in with email and password
                 auth.signInWithEmailAndPassword(email, password)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
-                        val intent = Intent(this, NextActivity::class.java)
-                        intent.putExtra("role", "Student")
-                        startActivity(intent)
-                        finish()
+                    .addOnSuccessListener { authResult ->
+                        val uid = authResult.user?.uid
+                        if (uid != null) {
+                            // Step 2: Get phone number from Firestore
+                            db.collection("users").document(uid).get()
+                                .addOnSuccessListener { doc ->
+                                    val phoneNumber = doc.getString("phone")
+                                    if (phoneNumber != null) {
+                                        // Step 3: Start phone verification
+                                        startPhoneNumberVerification(phoneNumber)
+                                    } else {
+                                        Toast.makeText(this, "Phone number not found for this user.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        } else {
+                             Toast.makeText(this, "Login failed, please try again.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                     .addOnFailureListener { e ->
                         Toast.makeText(this, "Login failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -97,6 +115,51 @@ class MainActivity : AppCompatActivity() {
 
         forgotPasswordTextView.setOnClickListener {
             val intent = Intent(this, ForgotPasswordActivity::class.java)
+            startActivity(intent)
+        }
+    }
+
+    private fun startPhoneNumberVerification(phoneNumber: String) {
+        val options = PhoneAuthOptions.newBuilder(auth)
+            .setPhoneNumber(phoneNumber)       // Phone number to verify
+            .setTimeout(60L, TimeUnit.SECONDS) // Timeout and unit
+            .setActivity(this)                 // Activity (for callback binding)
+            .setCallbacks(callbacks)          // OnVerificationStateChangedCallbacks
+            .build()
+        PhoneAuthProvider.verifyPhoneNumber(options)
+    }
+
+    private val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+        override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
+            // This callback will be invoked in two situations:
+            // 1 - Instant verification. In some cases the phone number can be instantly
+            //     verified without needing to send or enter a verification code.
+            // 2 - Auto-retrieval. On some devices Google Play services can automatically
+            //     detect the incoming verification SMS and perform verification without
+            //     user action.
+            auth.signInWithCredential(credential).addOnCompleteListener {
+                 if(it.isSuccessful){
+                     val intent = Intent(this@MainActivity, NextActivity::class.java)
+                     intent.putExtra("role", "Student")
+                     startActivity(intent)
+                     finish()
+                 }
+            }
+        }
+
+        override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
+            Toast.makeText(this@MainActivity, "Verification failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+
+        override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
+            // The SMS verification code has been sent to the provided phone number, we
+            // now need to ask the user to enter the code and create a credential
+            // with the code and verification ID.
+            val intent = Intent(this@MainActivity, OtpVerificationActivity::class.java).apply {
+                putExtra("verificationId", verificationId)
+                putExtra("resendToken", token)
+                putExtra("phoneNumber", auth.currentUser?.phoneNumber)
+            }
             startActivity(intent)
         }
     }
