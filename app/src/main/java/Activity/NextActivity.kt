@@ -67,7 +67,9 @@ class NextActivity : ComponentActivity() {
                                     val intent = Intent(
                                         this@NextActivity,
                                         SubmitReportActivity::class.java
-                                    )
+                                    ).apply {
+                                        putExtra("reporterName", userName)
+                                    }
                                     startActivity(intent)
                                 },
                                 containerColor = Color(0xFFE1001B),

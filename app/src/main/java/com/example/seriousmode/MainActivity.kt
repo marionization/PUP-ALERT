@@ -2,18 +2,20 @@ package com.example.seriousmode
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import Activity.NextActivity
 import Activity.RegisterActivity
 import Activity.ForgotPasswordActivity
 import Activity.OtpVerificationActivity
 import java.util.concurrent.TimeUnit
-import com.google.firebase.auth.PhoneAuthOptions
 
 class MainActivity : AppCompatActivity() {
 
@@ -68,6 +70,7 @@ class MainActivity : AppCompatActivity() {
 
             if (selectedRole == "Administrator") {
                 if (email == adminEmail && password == adminPassword) {
+                    updateFcmToken(auth.currentUser?.uid) // Admin does not have a real account, you might need a different logic for admin tokens
                     Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
                     val intent = Intent(this, NextActivity::class.java)
                     intent.putExtra("role", "Administrator")
@@ -120,31 +123,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startPhoneNumberVerification(phoneNumber: String) {
-        val options = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber(phoneNumber)       // Phone number to verify
-            .setTimeout(60L, TimeUnit.SECONDS) // Timeout and unit
-            .setActivity(this)                 // Activity (for callback binding)
-            .setCallbacks(callbacks)          // OnVerificationStateChangedCallbacks
-            .build()
-        PhoneAuthProvider.verifyPhoneNumber(options)
+        PhoneAuthProvider.getInstance().verifyPhoneNumber(
+            phoneNumber,          // Phone number to verify
+            60,                 // Timeout duration
+            TimeUnit.SECONDS,
+            this,               // Activity
+            callbacks
+        )
     }
 
     private val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-        override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
-            // This callback will be invoked in two situations:
-            // 1 - Instant verification. In some cases the phone number can be instantly
-            //     verified without needing to send or enter a verification code.
-            // 2 - Auto-retrieval. On some devices Google Play services can automatically
-            //     detect the incoming verification SMS and perform verification without
-            //     user action.
-            auth.signInWithCredential(credential).addOnCompleteListener {
-                 if(it.isSuccessful){
-                     val intent = Intent(this@MainActivity, NextActivity::class.java)
-                     intent.putExtra("role", "Student")
-                     startActivity(intent)
-                     finish()
-                 }
-            }
+        override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+            signInWithPhoneAuthCredential(credential)
         }
 
         override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
@@ -152,15 +142,67 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
-            // The SMS verification code has been sent to the provided phone number, we
-            // now need to ask the user to enter the code and create a credential
-            // with the code and verification ID.
             val intent = Intent(this@MainActivity, OtpVerificationActivity::class.java).apply {
                 putExtra("verificationId", verificationId)
                 putExtra("resendToken", token)
-                putExtra("phoneNumber", auth.currentUser?.phoneNumber)
             }
             startActivity(intent)
+        }
+    }
+    
+    private fun signInWithPhoneAuthCredential(credential: PhoneAuthCredential) {
+        auth.signInWithCredential(credential)
+            .addOnSuccessListener { authResult ->
+                val uid = authResult.user?.uid
+                if (uid != null) {
+                    fetchAndSaveUserData(uid) {
+                        updateFcmToken(uid)
+                        Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
+                        val intent = Intent(this, NextActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            putExtra("role", "Student")
+                        }
+                        startActivity(intent)
+                    }
+                } else {
+                    Toast.makeText(this, "Login failed after verification.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Verification failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun fetchAndSaveUserData(uid: String, onComplete: () -> Unit) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { document ->
+                if (document != null) {
+                    val name = document.getString("name") ?: "Student"
+                    val studentId = document.getString("studentId") ?: ""
+                    
+                    val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("user_name", name)
+                        .putString("student_id", studentId)
+                        .apply()
+                }
+                onComplete()
+            }
+            .addOnFailureListener { 
+                Toast.makeText(this, "Failed to fetch user data.", Toast.LENGTH_SHORT).show()
+                onComplete()
+            }
+    }
+
+    private fun updateFcmToken(uid: String?) {
+        if (uid == null) return
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w("FCM", "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+            val token = task.result
+            db.collection("users").document(uid).update("fcmToken", token)
         }
     }
 }
