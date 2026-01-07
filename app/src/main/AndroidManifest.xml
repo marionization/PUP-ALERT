@@ -31,6 +31,20 @@
         </activity>
 
         <activity
+            android:name="Activity.ResetPasswordActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="seriousmode.page.link"
+                    android:pathPrefix="/reset"
+                    android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name="Activity.SubmitReportActivity"
             android:exported="false"
             android:label="Submit Report"
