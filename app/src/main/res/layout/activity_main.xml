@@ -3,182 +3,240 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFF8F9FF">
+    android:background="#FFF5F5F7"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:padding="24dp">
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="24dp">
 
-        <!-- HEADER: Logo + Title + Subtitle above the card -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:background="#FFF8F9FF"
-            android:paddingBottom="8dp"
-            android:paddingTop="32dp">
+            android:paddingTop="20dp"
+            android:paddingBottom="8dp">
 
             <ImageView
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:src="@drawable/ic_school_logo"
+                android:id="@+id/imageLogo"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
                 android:layout_gravity="center"
+                android:layout_marginBottom="8dp"
                 android:contentDescription="PUP Logo"
-                android:layout_marginBottom="8dp" />
+                android:src="@drawable/ic_school_logo" />
 
             <TextView
+                android:id="@+id/textCampusName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
                 android:text="PUP Parañaque Campus"
-                android:textSize="22sp"
-                android:textColor="#D32F2F"
+                android:textColor="#C62828"
+                android:textSize="24sp"
                 android:textStyle="bold"
-                android:gravity="center"
-                android:layout_marginTop="8dp" />
+                android:gravity="center" />
 
             <TextView
+                android:id="@+id/textSystemName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Report And Monitoring System"
-                android:textSize="15sp"
+                android:layout_marginTop="2dp"
+                android:text="Report and Monitoring System"
                 android:textColor="#616161"
+                android:textSize="14sp"
                 android:gravity="center" />
         </LinearLayout>
 
-        <!-- FLOATING LOGIN BOX -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="10dp"
-            android:background="#F2F3F4"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="28dp">
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="24dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
+            app:cardUseCompatPadding="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:background="#FFFFFFFF"
                 android:padding="24dp">
 
                 <TextView
+                    android:id="@+id/textWelcome"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Welcome Back"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:paddingBottom="2dp" />
+                    android:textColor="#212121"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/textSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="16dp"
                     android:text="Sign in to submit and monitor campus reports"
-                    android:textSize="12sp"
-                    android:textColor="#616161"
-                    android:paddingBottom="12dp" />
+                    android:textColor="#757575"
+                    android:textSize="13sp" />
 
-                <!-- RadioGroup for Student/Admin selection -->
                 <RadioGroup
                     android:id="@+id/radioGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
+                    android:layout_marginBottom="18dp"
                     android:gravity="center"
-                    android:layout_marginBottom="14dp">
+                    android:orientation="horizontal">
 
                     <RadioButton
                         android:id="@+id/radioStudent"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Student"
+                        android:buttonTint="#C62828"
                         android:checked="true"
-                        android:buttonTint="#D32F2F" />
+                        android:text="Student"
+                        android:textColor="#212121"
+                        android:textSize="15sp" />
 
                     <RadioButton
                         android:id="@+id/radioAdmin"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:buttonTint="#C62828"
                         android:text="Admin"
-                        android:buttonTint="#D32F2F" />
+                        android:textColor="#212121"
+                        android:textSize="15sp" />
                 </RadioGroup>
 
-                <!-- Email field -->
+                <TextView
+                    android:id="@+id/labelEmail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:labelFor="@id/editTextEmail"
+                    android:text="Email Address"
+                    android:textColor="#616161"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/emailInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Email Address"
-                    android:layout_marginTop="10dp">
+                    android:layout_marginTop="6dp"
+                    android:hint="Enter your email"
+                    app:boxBackgroundMode="outline"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:helperText="Use your PUP email address">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/editTextEmail"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:autofillHints="emailAddress"
+                        android:importantForAutofill="yes"
                         android:inputType="textEmailAddress"
-                        android:padding="10dp" />
+                        android:maxLines="1"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- Password field with eye toggle -->
+                <TextView
+                    android:id="@+id/labelPassword"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:labelFor="@id/editTextPassword"
+                    android:text="Password"
+                    android:textColor="#616161"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/passwordInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Password"
-                    app:endIconMode="password_toggle"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginTop="6dp"
+                    android:hint="Enter your password"
+                    app:boxBackgroundMode="outline"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:endIconMode="password_toggle">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/editTextPassword"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:autofillHints="password"
+                        android:importantForAutofill="yes"
                         android:inputType="textPassword"
-                        android:padding="10dp" />
+                        android:maxLines="1"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- Forgot Password Text -->
                 <TextView
                     android:id="@+id/textForgotPassword"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="end"
+                    android:paddingBottom="4dp"
                     android:text="Forgot Password?"
                     android:textColor="#616161"
-                    android:textSize="12sp"
-                    android:gravity="end"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="8dp" />
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/buttonSignIn"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="18dp"
+                    android:backgroundTint="#C62828"
                     android:text="Sign In as Student"
-                    android:backgroundTint="#D32F2F"
+                    android:textAllCaps="false"
                     android:textColor="#FFFFFF"
-                    android:layout_marginTop="16dp" />
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
-                <!-- Registration link instead of demo credentials -->
                 <TextView
                     android:id="@+id/textRegister"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="No account yet? Register here"
-                    android:textColor="#D32F2F"
-                    android:textSize="13sp"
+                    android:layout_marginTop="14dp"
                     android:gravity="center"
-                    android:paddingTop="12dp" />
+                    android:text="No account yet? Register here"
+                    android:textColor="#C62828"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/textHelper"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
                     android:gravity="center"
                     android:text="Use your PUP email and password to sign in"
-                    android:textColor="#888888"
-                    android:textSize="12sp"
-                    android:paddingTop="8dp" />
+                    android:textColor="#8A8A8A"
+                    android:textSize="12sp" />
+
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -186,11 +244,11 @@
             android:id="@+id/footer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="For assistance, contact the IT Department at Building A"
-            android:textSize="12sp"
-            android:textColor="#616161"
             android:gravity="center"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="8dp"
+            android:text="For assistance, contact the IT Department at Building A"
+            android:textColor="#616161"
+            android:textSize="12sp" />
 
     </LinearLayout>
 </ScrollView>

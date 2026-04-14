@@ -9,11 +9,14 @@ data class Report(
     val location: String = "",
     val description: String = "",
     val imageUrl: String? = null,
-    var status: String = "Pending",
+    val mediaUrl: String = "",
+    val mediaType: String = "",
+    val status: String = "Pending",
     val dateSubmitted: String = "",
     val reporter: String = "",
-    val timestamp: Long = 0,
-    val resolvedTimestamp: Long = 0
+    val timestamp: Long = 0L,
+    val averageRating: Double = 0.0,
+    val ratingCount: Int = 0
 )
 
 object ReportRepository {
