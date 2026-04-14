@@ -6,6 +6,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.seriousmode.R
+import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -45,9 +46,19 @@ class ForgotPasswordActivity : AppCompatActivity() {
                         val email = userDoc.getString("email")
 
                         if (email != null) {
-                            auth.sendPasswordResetEmail(email)
+                            val actionCodeSettings = ActionCodeSettings.newBuilder()
+                                .setUrl("https://seriousmode.page.link/reset") // This URL needs to be whitelisted in Firebase console
+                                .setHandleCodeInApp(true)
+                                .setAndroidPackageName(
+                                    "com.example.seriousmode",
+                                    true, /* installIfNotAvailable */
+                                    null /* minimumVersion */
+                                )
+                                .build()
+
+                            auth.sendPasswordResetEmail(email, actionCodeSettings)
                                 .addOnSuccessListener {
-                                    Toast.makeText(this, "Password reset link sent to $email", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this, "Reset link sent to $email", Toast.LENGTH_LONG).show()
                                     finish()
                                 }
                                 .addOnFailureListener { e ->

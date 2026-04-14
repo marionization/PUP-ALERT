@@ -3,7 +3,6 @@
     package="com.example.seriousmode">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_school_logo"
@@ -11,6 +10,7 @@
         android:roundIcon="@drawable/ic_school_logo"
         android:supportsRtl="true"
         android:theme="@style/Theme.SeriousMode">
+
 
         <service
             android:name="Activity.MyFirebaseMessagingService"
@@ -27,6 +27,20 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="Activity.ResetPasswordActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="seriousmode.page.link"
+                    android:pathPrefix="/reset"
+                    android:scheme="https" />
             </intent-filter>
         </activity>
 

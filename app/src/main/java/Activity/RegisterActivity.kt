@@ -2,13 +2,12 @@ package Activity
 
 import android.os.Bundle
 import android.widget.Button
-import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.seriousmode.R
+import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-
 
 class RegisterActivity : AppCompatActivity() {
 
@@ -19,27 +18,30 @@ class RegisterActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_register)
 
-        // Firebase instances
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
-        val nameEditText = findViewById<EditText>(R.id.editTextName)
-        val emailEditText = findViewById<EditText>(R.id.editTextEmail)
-        val studentIdEditText = findViewById<EditText>(R.id.editTextPUP_id)
-        val phoneEditText = findViewById<EditText>(R.id.editTextPhone)
-        val passwordEditText = findViewById<EditText>(R.id.editTextPassword)
-        val confirmPasswordEditText = findViewById<EditText>(R.id.editTextConfirmPassword)
+        val firstNameEditText = findViewById<TextInputEditText>(R.id.editTextFirstName)
+        val lastNameEditText = findViewById<TextInputEditText>(R.id.editTextLastName)
+        val emailEditText = findViewById<TextInputEditText>(R.id.editTextEmail)
+        val studentIdEditText = findViewById<TextInputEditText>(R.id.editTextPUP_id)
+        val phoneEditText = findViewById<TextInputEditText>(R.id.editTextPhone)
+        val passwordEditText = findViewById<TextInputEditText>(R.id.editTextPassword)
+        val confirmPasswordEditText = findViewById<TextInputEditText>(R.id.editTextConfirmPassword)
         val registerButton = findViewById<Button>(R.id.buttonRegister)
 
         registerButton.setOnClickListener {
-            val name = nameEditText.text.toString().trim()
+            val firstName = firstNameEditText.text.toString().trim()
+            val lastName = lastNameEditText.text.toString().trim()
+            val fullName = "$firstName $lastName".trim()
             val email = emailEditText.text.toString().trim()
             val studentId = studentIdEditText.text.toString().trim()
             val phone = phoneEditText.text.toString().trim()
             val password = passwordEditText.text.toString()
             val confirmPassword = confirmPasswordEditText.text.toString()
 
-            if (name.isEmpty() ||
+            if (firstName.isEmpty() ||
+                lastName.isEmpty() ||
                 email.isEmpty() ||
                 studentId.isEmpty() ||
                 phone.isEmpty() ||
@@ -50,18 +52,16 @@ class RegisterActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // PUP email must end with @iskolarngbayan.pup.edu.ph
             val pupEmailPattern = Regex("""^[A-Za-z0-9._%+-]+@iskolarngbayan\.pup\.edu\.ph$""")
             if (!pupEmailPattern.matches(email)) {
                 Toast.makeText(
                     this,
-                    "Please use your PUP email (example: jonerickjamesvimperial@iskolarngbayan.pup.edu.ph)",
+                    "Please use your PUP email",
                     Toast.LENGTH_SHORT
                 ).show()
                 return@setOnClickListener
             }
 
-            // student ID must be like 2023-00226-PQ-0  (YYYY-#####-AA-#)
             val studentIdPattern = Regex("""\d{4}-\d{5}-[A-Za-z]{2}-\d""")
             if (!studentIdPattern.matches(studentId)) {
                 Toast.makeText(
@@ -82,7 +82,6 @@ class RegisterActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // Create user in Firebase Authentication
             auth.createUserWithEmailAndPassword(email, password)
                 .addOnSuccessListener { result ->
                     val uid = result.user?.uid
@@ -92,9 +91,10 @@ class RegisterActivity : AppCompatActivity() {
                         return@addOnSuccessListener
                     }
 
-                    // Save profile in Firestore
                     val userData = mapOf(
-                        "name" to name,
+                        "firstName" to firstName,
+                        "lastName" to lastName,
+                        "name" to fullName,
                         "email" to email,
                         "studentId" to studentId,
                         "phone" to phone,
@@ -105,15 +105,14 @@ class RegisterActivity : AppCompatActivity() {
                         .document(uid)
                         .set(userData)
                         .addOnSuccessListener {
-                            // also keep using SharedPreferences for your header
                             val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                             prefs.edit()
-                                .putString("user_name", name)
+                                .putString("user_name", fullName)
                                 .putString("student_id", studentId)
                                 .apply()
 
                             Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
-                            finish() // back to login
+                            finish()
                         }
                         .addOnFailureListener { e ->
                             Toast.makeText(this, "Failed to save profile: ${e.message}", Toast.LENGTH_SHORT).show()
