@@ -11,7 +11,7 @@ data class Report(
     val imageUrl: String? = null,
     val mediaUrl: String = "",
     val mediaType: String = "",
-    val status: String = "Pending",
+    val status: String = "In Review",
     val dateSubmitted: String = "",
     val reporter: String = "",
     val timestamp: Long = 0L,

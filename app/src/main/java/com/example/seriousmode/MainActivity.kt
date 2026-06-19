@@ -287,16 +287,7 @@ class MainActivity : AppCompatActivity() {
     private val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
 
         override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-            val currentUser = auth.currentUser
-            if (currentUser != null) {
-                currentUser.linkWithCredential(credential)
-                    .addOnSuccessListener {
-                        Log.d("MainActivity", "Auto verification linked successfully for UID: ${currentUser.uid}")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.d("MainActivity", "Auto verification link skipped/failed: ${e.message}")
-                    }
-            }
+            Log.d("MainActivity", "Auto verification completed.")
         }
 
         override fun onVerificationFailed(e: FirebaseException) {
