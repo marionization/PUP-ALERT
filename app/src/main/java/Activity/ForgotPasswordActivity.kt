@@ -32,8 +32,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please enter your Student ID", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-
-            // Find user by Student ID
+            
             db.collection("users")
                 .whereEqualTo("studentId", studentId)
                 .get()
@@ -41,7 +40,6 @@ class ForgotPasswordActivity : AppCompatActivity() {
                     if (documents.isEmpty) {
                         Toast.makeText(this, "Student ID not found", Toast.LENGTH_SHORT).show()
                     } else {
-                        // Assuming one user per student ID
                         val userDoc = documents.documents[0]
                         val email = userDoc.getString("email")
 

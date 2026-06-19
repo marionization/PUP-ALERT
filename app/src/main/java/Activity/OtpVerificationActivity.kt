@@ -82,6 +82,17 @@ class OtpVerificationActivity : AppCompatActivity() {
 
         verifyButton.isEnabled = false
 
+        val alreadyLinked = currentUser.providerData.any {
+            it.providerId == PhoneAuthProvider.PROVIDER_ID
+        }
+
+        if (alreadyLinked) {
+            Log.d("OtpVerification", "Phone provider already linked for UID: ${currentUser.uid}")
+            saveOtpVerifiedState(currentUser.uid)
+            fetchAndSaveUserData(currentUser.uid)
+            return
+        }
+
         currentUser.linkWithCredential(credential)
             .addOnSuccessListener {
                 Log.d("OtpVerification", "Phone linked to UID: ${currentUser.uid}")
@@ -89,17 +100,7 @@ class OtpVerificationActivity : AppCompatActivity() {
                 fetchAndSaveUserData(currentUser.uid)
             }
             .addOnFailureListener { e ->
-                val errorMessage = e.message.orEmpty()
-
-                if (
-                    errorMessage.contains("already linked", ignoreCase = true) ||
-                    errorMessage.contains("provider-already-linked", ignoreCase = true) ||
-                    errorMessage.contains("credential-already-in-use", ignoreCase = true)
-                ) {
-                    Log.d("OtpVerification", "Phone already linked. Continuing with UID: ${currentUser.uid}")
-                    saveOtpVerifiedState(currentUser.uid)
-                    fetchAndSaveUserData(currentUser.uid)
-                } else if (e is FirebaseAuthInvalidCredentialsException) {
+                if (e is FirebaseAuthInvalidCredentialsException) {
                     verifyButton.isEnabled = true
                     Toast.makeText(this, "Invalid OTP.", Toast.LENGTH_SHORT).show()
                 } else {
@@ -116,7 +117,7 @@ class OtpVerificationActivity : AppCompatActivity() {
             .putString("otp_verified_uid", uid)
             .apply()
 
-        Log.d("OtpVerification", "Saved OTP verified state for UID: $uid")
+        Log.d("OtpVerification", "Saved OTP verified state for UID: ${uid}")
     }
 
     private fun fetchAndSaveUserData(uid: String) {
@@ -144,6 +145,7 @@ class OtpVerificationActivity : AppCompatActivity() {
                         .putString("user_name", fullName)
                         .putString("student_first_name", displayFirstName)
                         .putString("student_id", studentId)
+                        .putString("role", "Student")
                         .apply()
 
                     Log.d("OtpVerification", "Saved user_name: $fullName")
@@ -180,7 +182,7 @@ class OtpVerificationActivity : AppCompatActivity() {
             this,
             object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                    verifyOtpForCurrentStudent(credential)
+                    Log.d("OtpVerification", "Resend auto verification completed.")
                 }
 
                 override fun onVerificationFailed(e: FirebaseException) {

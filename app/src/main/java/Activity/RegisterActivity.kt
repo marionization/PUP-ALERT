@@ -72,6 +72,16 @@ class RegisterActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            val phonePattern = Regex("""^\+63\d{10}$""")
+            if (!phonePattern.matches(phone)) {
+                Toast.makeText(
+                    this,
+                    "Phone number must be in the format +639123456789",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@setOnClickListener
+            }
+
             if (password.length < 6) {
                 Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -108,7 +118,10 @@ class RegisterActivity : AppCompatActivity() {
                             val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                             prefs.edit()
                                 .putString("user_name", fullName)
+                                .putString("student_first_name", firstName)
                                 .putString("student_id", studentId)
+                                .putBoolean("otp_verified", false)
+                                .remove("otp_verified_uid")
                                 .apply()
 
                             Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
