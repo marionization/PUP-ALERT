@@ -1,13 +1,17 @@
 package Activity
 
+import Activity.ui.theme.SeriousModeTheme
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import android.widget.VideoView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -59,16 +64,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
-import Activity.ui.theme.SeriousModeTheme
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-
+data class ReportUiData(
+    val title: String = "",
+    val category: String = "",
+    val location: String = "",
+    val description: String = "",
+    val imageUri: Uri? = null,
+    val mediaUrl: String = "",
+    val mediaType: String = "",
+    val status: String = "",
+    val dateSubmitted: String = "",
+    val reporter: String = "",
+    val adminUpdateMediaUrl: String = "",
+    val adminUpdateMediaType: String = "",
+    val adminNote: String = ""
+)
 
 fun loadAccessibilitySettings(context: Context): AccessibilitySettings {
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
@@ -84,22 +109,35 @@ fun loadAccessibilitySettings(context: Context): AccessibilitySettings {
     )
 }
 
+fun createAdminUpdateImageFile(context: Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    return File.createTempFile(
+        "ADMIN_UPDATE_${timeStamp}_",
+        ".jpg",
+        storageDir
+    )
+}
+
 class ReportDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val role = intent.getStringExtra("role") ?: "Student"
-        val title = intent.getStringExtra("title") ?: ""
-        val category = intent.getStringExtra("category") ?: ""
-        val location = intent.getStringExtra("location") ?: ""
-        val description = intent.getStringExtra("description") ?: ""
-        val imageUriStr = intent.getStringExtra("imageUri")
-        val mediaUrl = intent.getStringExtra("mediaUrl") ?: ""
-        val mediaType = intent.getStringExtra("mediaType") ?: ""
-        val status = intent.getStringExtra("status") ?: ""
-        val dateSubmitted = intent.getStringExtra("dateSubmitted") ?: ""
-        val reporter = intent.getStringExtra("reporter") ?: ""
-        val reportId = intent.getStringExtra("id") ?: ""
+        val reportId = intent.getStringExtra("id")
+            ?: intent.getStringExtra("reportId")
+            ?: ""
+
+        val initialTitle = intent.getStringExtra("title") ?: ""
+        val initialCategory = intent.getStringExtra("category") ?: ""
+        val initialLocation = intent.getStringExtra("location") ?: ""
+        val initialDescription = intent.getStringExtra("description") ?: ""
+        val initialImageUriStr = intent.getStringExtra("imageUri")
+        val initialMediaUrl = intent.getStringExtra("mediaUrl") ?: ""
+        val initialMediaType = intent.getStringExtra("mediaType") ?: ""
+        val initialStatus = intent.getStringExtra("status") ?: ""
+        val initialDateSubmitted = intent.getStringExtra("dateSubmitted") ?: ""
+        val initialReporter = intent.getStringExtra("reporter") ?: ""
 
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val fullUserName = prefs.getString("user_name", "Student") ?: "Student"
@@ -107,30 +145,119 @@ class ReportDetailActivity : ComponentActivity() {
 
         Log.d("ReportDetailActivity", "Received reportId: $reportId")
 
-        val imageUri = if (!imageUriStr.isNullOrEmpty()) Uri.parse(imageUriStr) else null
+        val fallbackImageUri =
+            if (!initialImageUriStr.isNullOrEmpty()) Uri.parse(initialImageUriStr) else null
+
+        val fallbackReport = ReportUiData(
+            title = initialTitle,
+            category = initialCategory,
+            location = initialLocation,
+            description = initialDescription,
+            imageUri = fallbackImageUri,
+            mediaUrl = initialMediaUrl,
+            mediaType = initialMediaType,
+            status = initialStatus,
+            dateSubmitted = initialDateSubmitted,
+            reporter = initialReporter
+        )
 
         setContent {
             SeriousModeTheme {
-                ReportDetailScreen(
+                ReportDetailScreenHost(
                     onBackClick = { finish() },
-                    title = title,
-                    category = category,
-                    location = location,
-                    description = description,
-                    imageUri = imageUri,
-                    mediaUrl = mediaUrl,
-                    mediaType = mediaType,
-                    status = status,
-                    dateSubmitted = dateSubmitted,
-                    reporter = reporter,
                     isAdmin = role.equals("Administrator", ignoreCase = true) ||
                             role.equals("Admin", ignoreCase = true),
                     currentUserName = fullUserName,
                     reportId = reportId,
+                    fallbackReport = fallbackReport,
                     settings = appSettings
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ReportDetailScreenHost(
+    onBackClick: () -> Unit,
+    isAdmin: Boolean,
+    currentUserName: String,
+    reportId: String,
+    fallbackReport: ReportUiData,
+    settings: AccessibilitySettings
+) {
+    val db = FirebaseFirestore.getInstance()
+
+    var reportData by remember { mutableStateOf(fallbackReport) }
+    var isLoading by remember { mutableStateOf(reportId.isNotBlank() && fallbackReport.title.isBlank()) }
+
+    LaunchedEffect(reportId) {
+        if (reportId.isNotBlank()) {
+            db.collection("reports").document(reportId)
+                .get()
+                .addOnSuccessListener { doc ->
+                    if (doc.exists()) {
+                        val imageUriStr = doc.getString("imageUrl")
+                        reportData = ReportUiData(
+                            title = doc.getString("title") ?: fallbackReport.title,
+                            category = doc.getString("category") ?: fallbackReport.category,
+                            location = doc.getString("location") ?: fallbackReport.location,
+                            description = doc.getString("description") ?: fallbackReport.description,
+                            imageUri = if (!imageUriStr.isNullOrBlank()) Uri.parse(imageUriStr) else fallbackReport.imageUri,
+                            mediaUrl = doc.getString("mediaUrl") ?: fallbackReport.mediaUrl,
+                            mediaType = doc.getString("mediaType") ?: fallbackReport.mediaType,
+                            status = doc.getString("status") ?: fallbackReport.status,
+                            dateSubmitted = doc.getString("dateSubmitted") ?: fallbackReport.dateSubmitted,
+                            reporter = doc.getString("reporter") ?: fallbackReport.reporter,
+                            adminUpdateMediaUrl = doc.getString("adminUpdateMediaUrl") ?: "",
+                            adminUpdateMediaType = doc.getString("adminUpdateMediaType") ?: "",
+                            adminNote = doc.getString("adminNote") ?: ""
+                        )
+                    }
+                    isLoading = false
+                }
+                .addOnFailureListener {
+                    isLoading = false
+                }
+        } else {
+            isLoading = false
+        }
+    }
+
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    if (settings.contrastMode == "Dark Contrast") Color(0xFF121212) else Color.White
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color = if (settings.grayscaleMode) Color.DarkGray else Color(0xFFE1001B)
+            )
+        }
+    } else {
+        ReportDetailScreen(
+            onBackClick = onBackClick,
+            title = reportData.title,
+            category = reportData.category,
+            location = reportData.location,
+            description = reportData.description,
+            imageUri = reportData.imageUri,
+            mediaUrl = reportData.mediaUrl,
+            mediaType = reportData.mediaType,
+            status = reportData.status,
+            dateSubmitted = reportData.dateSubmitted,
+            reporter = reportData.reporter,
+            adminUpdateMediaUrl = reportData.adminUpdateMediaUrl,
+            adminUpdateMediaType = reportData.adminUpdateMediaType,
+            adminNote = reportData.adminNote,
+            isAdmin = isAdmin,
+            currentUserName = currentUserName,
+            reportId = reportId,
+            settings = settings
+        )
     }
 }
 
@@ -148,6 +275,9 @@ fun ReportDetailScreen(
     status: String,
     dateSubmitted: String,
     reporter: String,
+    adminUpdateMediaUrl: String,
+    adminUpdateMediaType: String,
+    adminNote: String,
     isAdmin: Boolean = false,
     currentUserName: String,
     reportId: String,
@@ -155,11 +285,13 @@ fun ReportDetailScreen(
 ) {
     val context = LocalContext.current
     val db = FirebaseFirestore.getInstance()
+    val storage = FirebaseStorage.getInstance()
 
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     val studentId = prefs.getString("student_id", "") ?: ""
 
     var selectedStatus by remember { mutableStateOf(status) }
+    var pendingStatus by remember { mutableStateOf(status) }
     val statusOptions = listOf("In Review", "In Progress", "Resolved")
     var statusDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -170,6 +302,27 @@ fun ReportDetailScreen(
 
     var reportAverageRating by remember { mutableDoubleStateOf(0.0) }
     var reportRatingCount by remember { mutableIntStateOf(0) }
+
+    var adminNoteInput by remember { mutableStateOf(adminNote) }
+    var existingAdminNote by remember { mutableStateOf(adminNote) }
+    var selectedAdminMediaUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedAdminMediaType by remember { mutableStateOf("") }
+    var existingAdminUpdateMediaUrl by remember { mutableStateOf(adminUpdateMediaUrl) }
+    var existingAdminUpdateMediaType by remember { mutableStateOf(adminUpdateMediaType) }
+    var isUpdatingStatus by remember { mutableStateOf(false) }
+    var tempCameraImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val adminCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraImageUri != null) {
+            selectedAdminMediaUri = tempCameraImageUri
+            selectedAdminMediaType = "image"
+        } else {
+            tempCameraImageUri = null
+            Toast.makeText(context, "Camera capture cancelled.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val reviewerKey = remember(studentId, currentUserName) {
         if (studentId.isNotBlank()) {
@@ -186,7 +339,14 @@ fun ReportDetailScreen(
                     if (snapshot != null && snapshot.exists()) {
                         reportAverageRating = snapshot.getDouble("averageRating") ?: 0.0
                         reportRatingCount = (snapshot.getLong("ratingCount") ?: 0L).toInt()
-                        selectedStatus = snapshot.getString("status") ?: selectedStatus
+
+                        val latestStatus = snapshot.getString("status") ?: selectedStatus
+                        selectedStatus = latestStatus
+                        pendingStatus = latestStatus
+
+                        existingAdminNote = snapshot.getString("adminNote") ?: ""
+                        existingAdminUpdateMediaUrl = snapshot.getString("adminUpdateMediaUrl") ?: ""
+                        existingAdminUpdateMediaType = snapshot.getString("adminUpdateMediaType") ?: ""
                     }
                 }
 
@@ -559,6 +719,65 @@ fun ReportDetailScreen(
             }
         }
 
+        if (existingAdminUpdateMediaUrl.isNotBlank() || existingAdminNote.isNotBlank()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                shape = cardShape,
+                colors = CardDefaults.cardColors(containerColor = cardBg),
+                elevation = CardDefaults.cardElevation(cardElevation)
+            ) {
+                Column(Modifier.padding(if (settings.largeButtons) 20.dp else 16.dp)) {
+                    Text(
+                        text = "Latest Admin Update",
+                        fontSize = sectionTitleSize,
+                        fontWeight = if (settings.boldText) FontWeight.ExtraBold else FontWeight.Bold,
+                        color = accentColor
+                    )
+
+                    if (existingAdminNote.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = existingAdminNote,
+                            fontSize = bodySize,
+                            color = textColor
+                        )
+                    }
+
+                    if (existingAdminUpdateMediaUrl.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        if (existingAdminUpdateMediaType == "image") {
+                            Image(
+                                painter = rememberAsyncImagePainter(existingAdminUpdateMediaUrl),
+                                contentDescription = "Admin update image",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (existingAdminUpdateMediaType == "video") {
+                            AndroidView(
+                                factory = { ctx ->
+                                    VideoView(ctx).apply {
+                                        setVideoURI(Uri.parse(existingAdminUpdateMediaUrl))
+                                        setOnPreparedListener { mp ->
+                                            mp.isLooping = false
+                                            seekTo(1)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .background(Color.Black)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (isAdmin && reportId.isNotEmpty()) {
             Card(
                 modifier = Modifier
@@ -599,10 +818,10 @@ fun ReportDetailScreen(
                         onExpandedChange = { statusDropdownExpanded = !statusDropdownExpanded }
                     ) {
                         OutlinedTextField(
-                            value = selectedStatus,
+                            value = pendingStatus,
                             onValueChange = {},
                             readOnly = true,
-                            textStyle = androidx.compose.ui.text.TextStyle(
+                            textStyle = TextStyle(
                                 color = textColor,
                                 fontSize = bodySize
                             ),
@@ -629,103 +848,276 @@ fun ReportDetailScreen(
                                         )
                                     },
                                     onClick = {
-                                        if (selectedStatus != option) {
-                                            val oldStatus = selectedStatus
-                                            selectedStatus = option
-                                            statusDropdownExpanded = false
-
-                                            val updates = hashMapOf<String, Any>(
-                                                "status" to option,
-                                                "resolvedTimestamp" to if (option == "Resolved") System.currentTimeMillis() else 0L
-                                            )
-
-                                            db.collection("reports").document(reportId)
-                                                .update(updates)
-                                                .addOnSuccessListener {
-                                                    if (option == "In Progress" || option == "Resolved") {
-                                                        val studentTitle = if (option == "Resolved") {
-                                                            "Report Resolved"
-                                                        } else {
-                                                            "Report Update"
-                                                        }
-
-                                                        val studentMessage = if (option == "Resolved") {
-                                                            "Your report \"$title\" has been resolved. Please check the latest update."
-                                                        } else {
-                                                            "Your report \"$title\" is now being reviewed by the staff."
-                                                        }
-
-                                                        val adminTitle = "Report Status Changed"
-                                                        val adminMessage = "A report \"$title\" is now marked as $option."
-
-                                                        val studentNotification = hashMapOf(
-                                                            "reportId" to reportId,
-                                                            "title" to studentTitle,
-                                                            "message" to studentMessage,
-                                                            "reportTitle" to title,
-                                                            "status" to option,
-                                                            "reporter" to reporter,
-                                                            "targetRole" to "Student",
-                                                            "targetUser" to reporter,
-                                                            "type" to "report_status",
-                                                            "read" to false,
-                                                            "timestamp" to Timestamp.now()
-                                                        )
-
-                                                        val adminNotification = hashMapOf(
-                                                            "reportId" to reportId,
-                                                            "title" to adminTitle,
-                                                            "message" to adminMessage,
-                                                            "reportTitle" to title,
-                                                            "status" to option,
-                                                            "reporter" to reporter,
-                                                            "targetRole" to "Admin",
-                                                            "targetUser" to "",
-                                                            "type" to "report_status",
-                                                            "read" to false,
-                                                            "timestamp" to Timestamp.now()
-                                                        )
-
-                                                        db.collection("notifications").add(studentNotification)
-                                                        db.collection("notifications").add(adminNotification)
-
-                                                        NotificationHelper.createNotificationChannel(context)
-                                                        NotificationHelper.showNotification(
-                                                            context = context,
-                                                            title = studentTitle,
-                                                            message = studentMessage
-                                                        )
-                                                    }
-
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Status updated to $option",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                                .addOnFailureListener { e ->
-                                                    selectedStatus = oldStatus
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Failed to update status: ${e.message}",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                        } else {
-                                            statusDropdownExpanded = false
-                                        }
+                                        pendingStatus = option
+                                        statusDropdownExpanded = false
                                     }
                                 )
                             }
                         }
                     }
 
-                    Text(
-                        "Change the status to keep everyone informed about the progress",
-                        color = accentColor,
-                        fontSize = smallSize,
-                        modifier = Modifier.padding(top = 8.dp)
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = adminNoteInput,
+                        onValueChange = { adminNoteInput = it },
+                        label = {
+                            Text(
+                                "Admin note",
+                                fontSize = bodySize
+                            )
+                        },
+                        textStyle = TextStyle(
+                            color = textColor,
+                            fontSize = bodySize
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(if (settings.largeButtons) 130.dp else 110.dp),
+                        maxLines = 4
                     )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Text(
+                        "Capture proof photo",
+                        fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = bodySize,
+                        color = textColor
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            try {
+                                val imageFile = createAdminUpdateImageFile(context)
+                                val imageUri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.provider",
+                                    imageFile
+                                )
+                                tempCameraImageUri = imageUri
+                                adminCameraLauncher.launch(imageUri)
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Unable to open camera: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(buttonHeight)
+                    ) {
+                        Text(
+                            text = if (selectedAdminMediaUri != null) "Retake Proof Photo" else "Take Proof Photo",
+                            color = if (settings.contrastMode == "Dark Contrast") Color.Black else Color.White,
+                            fontSize = bodySize,
+                            fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    when {
+                        selectedAdminMediaUri != null -> {
+                            Image(
+                                painter = rememberAsyncImagePainter(selectedAdminMediaUri),
+                                contentDescription = "Selected admin proof image",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        existingAdminUpdateMediaUrl.isNotBlank() && existingAdminUpdateMediaType == "image" -> {
+                            Image(
+                                painter = rememberAsyncImagePainter(existingAdminUpdateMediaUrl),
+                                contentDescription = "Current admin proof image",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        "A proof photo is required when moving a report to In Progress or Resolved.",
+                        color = accentColor,
+                        fontSize = smallSize
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            val needsProofPhoto =
+                                pendingStatus == "In Progress" || pendingStatus == "Resolved"
+
+                            if (needsProofPhoto &&
+                                selectedAdminMediaUri == null &&
+                                existingAdminUpdateMediaUrl.isBlank()
+                            ) {
+                                Toast.makeText(
+                                    context,
+                                    "Please capture a proof photo before updating the status.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@Button
+                            }
+
+                            if (adminNoteInput.trim().isBlank()) {
+                                Toast.makeText(
+                                    context,
+                                    "Please enter an admin note before updating the status.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@Button
+                            }
+
+                            isUpdatingStatus = true
+                            val cleanNote = adminNoteInput.trim()
+
+                            fun saveReportUpdate(mediaUrlToSave: String, mediaTypeToSave: String) {
+                                val updates = hashMapOf<String, Any>(
+                                    "status" to pendingStatus,
+                                    "resolvedTimestamp" to if (pendingStatus == "Resolved") System.currentTimeMillis() else 0L,
+                                    "adminNote" to cleanNote,
+                                    "lastUpdatedByAdmin" to currentUserName,
+                                    "lastUpdatedAt" to Timestamp.now(),
+                                    "adminUpdateMediaUrl" to mediaUrlToSave,
+                                    "adminUpdateMediaType" to mediaTypeToSave
+                                )
+
+                                db.collection("reports").document(reportId)
+                                    .update(updates)
+                                    .addOnSuccessListener {
+                                        existingAdminUpdateMediaUrl = mediaUrlToSave
+                                        existingAdminUpdateMediaType = mediaTypeToSave
+                                        existingAdminNote = cleanNote
+                                        selectedStatus = pendingStatus
+                                        selectedAdminMediaUri = null
+                                        selectedAdminMediaType = ""
+                                        tempCameraImageUri = null
+                                        adminNoteInput = cleanNote
+                                        isUpdatingStatus = false
+
+                                        val studentTitle = when (pendingStatus) {
+                                            "Resolved" -> "Report Resolved"
+                                            "In Progress" -> "Report Update"
+                                            else -> "Report Status Updated"
+                                        }
+
+                                        val studentMessage =
+                                            "Your report \"$title\" is now marked as $pendingStatus. Admin note: $cleanNote"
+
+                                        val studentNotification = hashMapOf(
+                                            "reportId" to reportId,
+                                            "title" to studentTitle,
+                                            "message" to studentMessage,
+                                            "reportTitle" to title,
+                                            "status" to pendingStatus,
+                                            "reporter" to reporter,
+                                            "targetRole" to "Student",
+                                            "targetUser" to reporter,
+                                            "type" to "report_status",
+                                            "read" to false,
+                                            "timestamp" to Timestamp.now(),
+                                            "adminNote" to cleanNote,
+                                            "adminUpdateMediaUrl" to mediaUrlToSave,
+                                            "adminUpdateMediaType" to mediaTypeToSave
+                                        )
+
+                                        val adminNotification = hashMapOf(
+                                            "reportId" to reportId,
+                                            "title" to "Report Status Changed",
+                                            "message" to "A report \"$title\" is now marked as $pendingStatus.",
+                                            "reportTitle" to title,
+                                            "status" to pendingStatus,
+                                            "reporter" to reporter,
+                                            "targetRole" to "Admin",
+                                            "targetUser" to "",
+                                            "type" to "report_status",
+                                            "read" to false,
+                                            "timestamp" to Timestamp.now()
+                                        )
+
+                                        db.collection("notifications").add(studentNotification)
+                                        db.collection("notifications").add(adminNotification)
+
+                                        NotificationHelper.createNotificationChannel(context)
+                                        NotificationHelper.showNotification(
+                                            context = context,
+                                            title = studentTitle,
+                                            message = studentMessage
+                                        )
+
+                                        Toast.makeText(
+                                            context,
+                                            "Status updated to $pendingStatus",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        isUpdatingStatus = false
+                                        Toast.makeText(
+                                            context,
+                                            "Failed to update status: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                            }
+
+                            if (selectedAdminMediaUri != null) {
+                                val storageRef = storage.reference.child(
+                                    "report_admin_updates/$reportId/${System.currentTimeMillis()}.jpg"
+                                )
+
+                                storageRef.putFile(selectedAdminMediaUri!!)
+                                    .continueWithTask { task ->
+                                        if (!task.isSuccessful) {
+                                            throw task.exception ?: Exception("Upload failed")
+                                        }
+                                        storageRef.downloadUrl
+                                    }
+                                    .addOnSuccessListener { downloadUri ->
+                                        saveReportUpdate(downloadUri.toString(), "image")
+                                    }
+                                    .addOnFailureListener { e ->
+                                        isUpdatingStatus = false
+                                        Toast.makeText(
+                                            context,
+                                            "Photo upload failed: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                            } else {
+                                saveReportUpdate(
+                                    existingAdminUpdateMediaUrl,
+                                    existingAdminUpdateMediaType.ifBlank { "image" }
+                                )
+                            }
+                        },
+                        enabled = !isUpdatingStatus,
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(buttonHeight)
+                    ) {
+                        Text(
+                            if (isUpdatingStatus) "Updating..." else "Update Status",
+                            fontSize = bodySize,
+                            color = if (settings.contrastMode == "Dark Contrast") Color.Black else Color.White,
+                            fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
 
                     if (selectedStatus == "Resolved") {
                         Spacer(Modifier.height(16.dp))
@@ -866,7 +1258,7 @@ fun ReportDetailScreen(
                                         fontSize = bodySize
                                     )
                                 },
-                                textStyle = androidx.compose.ui.text.TextStyle(
+                                textStyle = TextStyle(
                                     color = textColor,
                                     fontSize = bodySize
                                 ),

@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateUiForSelectedRole(role: String) {
         val isStudent = role == "Student"
 
-        signInButton.text = if (isStudent) "Sign In as Student" else "Sign In as Admin"
+        signInButton.text = if (isStudent) "Login" else "Login as Admin"
         registerTextView.visibility = if (isStudent) View.VISIBLE else View.GONE
         forgotPasswordTextView.visibility = if (isStudent) View.VISIBLE else View.GONE
 
@@ -270,7 +270,7 @@ class MainActivity : AppCompatActivity() {
         signInButton.text = if (isLoading) {
             "Signing In..."
         } else {
-            if (getSelectedRole() == "Student") "Sign In as Student" else "Sign In as Admin"
+            if (getSelectedRole() == "Student") "Login" else "Sign In as Admin"
         }
     }
 
