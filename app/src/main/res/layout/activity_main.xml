@@ -227,16 +227,6 @@
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/textHelper"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center"
-                    android:text="Use your PUP email and password to sign in"
-                    android:textColor="#8A8A8A"
-                    android:textSize="12sp" />
-
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
