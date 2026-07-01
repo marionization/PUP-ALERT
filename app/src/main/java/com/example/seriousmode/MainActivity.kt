@@ -3,7 +3,6 @@ package com.example.seriousmode
 import Activity.ForgotPasswordActivity
 import Activity.NextActivity
 import Activity.OtpVerificationActivity
-import Activity.RegisterActivity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -28,7 +27,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var roleRadioGroup: RadioGroup
     private lateinit var signInButton: Button
-    private lateinit var registerTextView: TextView
     private lateinit var forgotPasswordTextView: TextView
 
     private lateinit var emailInputLayout: TextInputLayout
@@ -60,7 +58,6 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         roleRadioGroup = findViewById(R.id.radioGroup)
         signInButton = findViewById(R.id.buttonSignIn)
-        registerTextView = findViewById(R.id.textRegister)
         forgotPasswordTextView = findViewById(R.id.textForgotPassword)
 
         emailInputLayout = findViewById(R.id.emailInputLayout)
@@ -83,10 +80,6 @@ class MainActivity : AppCompatActivity() {
             handleLogin()
         }
 
-        registerTextView.setOnClickListener {
-            startActivity(Intent(this, RegisterActivity::class.java))
-        }
-
         forgotPasswordTextView.setOnClickListener {
             startActivity(Intent(this, ForgotPasswordActivity::class.java))
         }
@@ -104,7 +97,6 @@ class MainActivity : AppCompatActivity() {
         val isStudent = role == "Student"
 
         signInButton.text = if (isStudent) "Login" else "Login as Admin"
-        registerTextView.visibility = if (isStudent) View.VISIBLE else View.GONE
         forgotPasswordTextView.visibility = if (isStudent) View.VISIBLE else View.GONE
 
         emailInputLayout.helperText = if (isStudent) {
