@@ -142,6 +142,7 @@ class OtpVerificationActivity : AppCompatActivity() {
 
                     val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                     prefs.edit()
+                        .putBoolean("is_logged_in", true)
                         .putString("user_name", fullName)
                         .putString("student_first_name", displayFirstName)
                         .putString("student_id", studentId)

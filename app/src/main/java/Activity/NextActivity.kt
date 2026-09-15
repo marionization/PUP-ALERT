@@ -28,10 +28,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -42,13 +52,23 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.LinearProgressIndicator
+import Activity.AnalyticsPrintHelper
+import Activity.AnalyticsExcelHelper
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -67,8 +87,11 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -140,6 +163,8 @@ class NextActivity : ComponentActivity() {
                     studentId = studentId,
                     onLogout = {
                         FirebaseAuth.getInstance().signOut()
+                        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                        prefs.edit().clear().apply()
                         val intent = Intent(this@NextActivity, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         }
@@ -157,6 +182,8 @@ enum class DrawerScreen(val title: String) {
     MyReports("My Reports"),
     Reports("Reports"),
     Dashboard("Dashboard"),
+    CampusPolls("Student Polls"),
+    Analytics("Analytics"),
     Settings("Settings")
 }
 
@@ -170,7 +197,9 @@ data class AppNotification(
     val reporter: String = "",
     val targetRole: String = "",
     val targetUser: String = "",
+    val targetUid: String = "",
     val type: String = "",
+    val isAnonymous: Boolean = false,
     val read: Boolean = false,
     val timestamp: Long = 0L
 )
@@ -259,6 +288,7 @@ fun NextActivityContent(
     }
 
     LaunchedEffect(role, userName) {
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
         FirebaseFirestore.getInstance()
             .collection("notifications")
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -276,7 +306,9 @@ fun NextActivityContent(
                                 reporter = doc.getString("reporter") ?: "",
                                 targetRole = doc.getString("targetRole") ?: "",
                                 targetUser = doc.getString("targetUser") ?: "",
+                                targetUid = doc.getString("targetUid") ?: "",
                                 type = doc.getString("type") ?: "",
+                                isAnonymous = doc.getBoolean("isAnonymous") ?: false,
                                 read = doc.getBoolean("read") ?: false,
                                 timestamp = doc.getTimestamp("timestamp")?.seconds ?: 0L
                             )
@@ -286,7 +318,8 @@ fun NextActivityContent(
                     }.filter { notification ->
                         if (role.equals("Student", ignoreCase = true)) {
                             notification.targetRole.equals("Student", ignoreCase = true) &&
-                                    notification.targetUser.equals(userName, ignoreCase = true)
+                                    (notification.targetUser.equals(userName, ignoreCase = true) ||
+                                            (currentUid.isNotBlank() && notification.targetUid == currentUid))
                         } else {
                             notification.targetRole.equals("Admin", ignoreCase = true) ||
                                     notification.targetRole.equals("Administrator", ignoreCase = true)
@@ -304,6 +337,8 @@ fun NextActivityContent(
             DrawerScreen.Profile,
             DrawerScreen.Reports,
             DrawerScreen.Dashboard,
+            DrawerScreen.CampusPolls,
+            DrawerScreen.Analytics,
             DrawerScreen.Settings
         )
     } else {
@@ -311,6 +346,7 @@ fun NextActivityContent(
             DrawerScreen.Profile,
             DrawerScreen.MyReports,
             DrawerScreen.Dashboard,
+            DrawerScreen.CampusPolls,
             DrawerScreen.Settings
         )
     }
@@ -522,10 +558,20 @@ fun NextActivityContent(
                         }
                     )
 
+                    DrawerScreen.CampusPolls -> CampusPollsScreen(
+                        role = role,
+                        currentUserName = userName,
+                        settings = appSettings
+                    )
+
                     DrawerScreen.Settings -> SettingsScreen(
                         role = role,
                         settings = appSettings,
                         onSettingsChange = { updated -> appSettings = updated }
+                    )
+
+                    DrawerScreen.Analytics -> AnalyticsScreen(
+                        settings = appSettings
                     )
                 }
             }
@@ -706,6 +752,8 @@ fun DrawerContent(
                                 DrawerScreen.MyReports -> Icons.Default.Assignment
                                 DrawerScreen.Reports -> Icons.AutoMirrored.Filled.MenuBook
                                 DrawerScreen.Dashboard -> Icons.Default.Dashboard
+                                DrawerScreen.CampusPolls -> Icons.Default.HowToVote
+                                DrawerScreen.Analytics -> Icons.Default.Assessment
                                 DrawerScreen.Settings -> Icons.Default.Settings
                             },
                             contentDescription = item.title,
@@ -1106,6 +1154,39 @@ fun NotificationsDialogCard(
                                         )
                                     }
 
+                                    if (notification.reporter.isNotBlank()) {
+                                        val displayReporter = if (notification.isAnonymous || notification.reporter == "Anonymous Student") {
+                                            "Anonymous Student"
+                                        } else {
+                                            notification.reporter
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Reporter: $displayReporter",
+                                                fontSize = smallSize,
+                                                color = faintTextColor
+                                            )
+                                            if (notification.isAnonymous || notification.reporter == "Anonymous Student") {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(
+                                                            if (settings.contrastMode == "Dark Contrast") Color(0xFF2A2A2A) else Color(0xFFEEEEEE),
+                                                            RoundedCornerShape(4.dp)
+                                                        )
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Anonymous",
+                                                        fontSize = (smallSize.value - 2).sp,
+                                                        color = if (settings.contrastMode == "Dark Contrast") Color.LightGray else Color.Gray
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.height(8.dp))
 
                                     Text(
@@ -1328,6 +1409,7 @@ fun DashboardScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
         db.collection("reports")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, e ->
@@ -1352,7 +1434,10 @@ fun DashboardScreen(
                             reporter = doc.getString("reporter") ?: "",
                             timestamp = doc.getTimestamp("timestamp")?.seconds ?: 0,
                             averageRating = doc.getDouble("averageRating") ?: 0.0,
-                            ratingCount = (doc.getLong("ratingCount") ?: 0L).toInt()
+                            ratingCount = (doc.getLong("ratingCount") ?: 0L).toInt(),
+                            isAnonymous = doc.getBoolean("isAnonymous") ?: false,
+                            reporterUid = doc.getString("reporterUid") ?: "",
+                            reporterStudentId = doc.getString("reporterStudentId") ?: ""
                         )
                     } catch (_: Exception) {
                         null
@@ -1360,7 +1445,10 @@ fun DashboardScreen(
                 }
 
                 allReports = if (role.equals("Student", ignoreCase = true)) {
-                    list.filter { it.reporter == currentUserName }
+                    list.filter {
+                        it.reporter == currentUserName ||
+                                (currentUid.isNotBlank() && it.reporterUid == currentUid)
+                    }
                 } else {
                     list
                 }
@@ -2549,7 +2637,10 @@ fun ReportList(
                             reporter = doc.getString("reporter") ?: "",
                             timestamp = doc.getTimestamp("timestamp")?.seconds ?: 0,
                             averageRating = doc.getDouble("averageRating") ?: 0.0,
-                            ratingCount = (doc.getLong("ratingCount") ?: 0L).toInt()
+                            ratingCount = (doc.getLong("ratingCount") ?: 0L).toInt(),
+                            isAnonymous = doc.getBoolean("isAnonymous") ?: false,
+                            reporterUid = doc.getString("reporterUid") ?: "",
+                            reporterStudentId = doc.getString("reporterStudentId") ?: ""
                         )
                     } catch (_: Exception) {
                         null
@@ -2563,10 +2654,14 @@ fun ReportList(
             }
     }
 
+    val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val filteredReports = allReports.filter { report ->
         val statusMatch = if (selectedStatus == "All") true else report.status == selectedStatus
         val categoryMatch = if (selectedCategory == "All Categories") true else report.category == selectedCategory
-        val userMatch = if (onlyMyReports) report.reporter == currentUserName else true
+        val userMatch = if (onlyMyReports) {
+            report.reporter == currentUserName ||
+                    (currentUid.isNotBlank() && report.reporterUid == currentUid)
+        } else true
         statusMatch && categoryMatch && userMatch
     }
 
@@ -2622,6 +2717,8 @@ fun ReportList(
                             putExtra("status", report.status)
                             putExtra("dateSubmitted", report.dateSubmitted)
                             putExtra("reporter", report.reporter)
+                            putExtra("isAnonymous", report.isAnonymous)
+                            putExtra("reporterUid", report.reporterUid)
                             putExtra("id", report.id)
                         }
                         context.startActivity(intent)
@@ -2749,6 +2846,24 @@ fun ReportItem(
                     color = subTextColor
                 )
 
+                if (report.isAnonymous || report.reporter == "Anonymous Student") {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (settings.contrastMode == "Dark Contrast") Color(0xFF2A2A2A) else Color(0xFFF0F0F0),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Anonymous",
+                            fontSize = (bodySize.value - 3).sp,
+                            color = if (settings.contrastMode == "Dark Contrast") Color(0xFFD0D0D0) else Color.Gray
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2812,6 +2927,1201 @@ fun ReportItem(
                     color = subTextColor
                 )
             }
+        }
+    }
+}
+
+data class SurveyData(
+    val id: String = "",
+    val reportId: String = "",
+    val studentName: String = "",
+    val rating: Int = 5,
+    val resolutionSpeed: String = "",
+    val qualityOfWork: String = "",
+    val communicationClarity: String = "",
+    val suggestions: String = ""
+)
+
+@Composable
+fun AnalyticsScreen(
+    settings: AccessibilitySettings
+) {
+    val context = LocalContext.current
+    val db = FirebaseFirestore.getInstance()
+
+    var allReports by remember { mutableStateOf<List<Report>>(emptyList()) }
+    var surveysList by remember { mutableStateOf<List<SurveyData>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        db.collectionGroup("surveys")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            SurveyData(
+                                id = doc.id,
+                                reportId = doc.getString("reportId") ?: "",
+                                studentName = doc.getString("studentName") ?: "Student",
+                                rating = (doc.getLong("rating") ?: 5L).toInt(),
+                                resolutionSpeed = doc.getString("resolutionSpeed") ?: "",
+                                qualityOfWork = doc.getString("qualityOfWork") ?: "",
+                                communicationClarity = doc.getString("communicationClarity") ?: "",
+                                suggestions = doc.getString("suggestions") ?: ""
+                            )
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    surveysList = list
+                }
+            }
+
+        db.collection("reports")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null || snapshot == null) {
+                    isLoading = false
+                    return@addSnapshotListener
+                }
+
+                val list = snapshot.documents.mapNotNull { doc ->
+                    try {
+                        Report(
+                            id = doc.id,
+                            title = doc.getString("title") ?: "",
+                            category = doc.getString("category") ?: "",
+                            location = doc.getString("location") ?: "",
+                            description = doc.getString("description") ?: "",
+                            imageUrl = doc.getString("imageUrl"),
+                            mediaUrl = doc.getString("mediaUrl") ?: "",
+                            mediaType = doc.getString("mediaType") ?: "",
+                            status = doc.getString("status") ?: "In Review",
+                            dateSubmitted = doc.getString("dateSubmitted") ?: "",
+                            reporter = doc.getString("reporter") ?: "",
+                            timestamp = doc.getTimestamp("timestamp")?.seconds ?: 0,
+                            averageRating = doc.getDouble("averageRating") ?: 0.0,
+                            ratingCount = (doc.getLong("ratingCount") ?: 0L).toInt(),
+                            isAnonymous = doc.getBoolean("isAnonymous") ?: false,
+                            reporterUid = doc.getString("reporterUid") ?: "",
+                            reporterStudentId = doc.getString("reporterStudentId") ?: ""
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+
+                allReports = list
+                isLoading = false
+            }
+    }
+
+    val total = allReports.size
+    val inReview = allReports.count { it.status == "In Review" }
+    val inProgress = allReports.count { it.status == "In Progress" }
+    val resolved = allReports.count { it.status == "Resolved" }
+    val resolutionRate = if (total > 0) (resolved.toDouble() / total * 100) else 0.0
+
+    val totalSurveys = surveysList.size
+    val completelySatisfiedCount = surveysList.count {
+        it.qualityOfWork.contains("completely", ignoreCase = true) || it.qualityOfWork.contains("yes", ignoreCase = true)
+    }
+    val partiallySatisfiedCount = surveysList.count {
+        it.qualityOfWork.contains("partially", ignoreCase = true)
+    }
+    val dissatisfiedCount = surveysList.count {
+        it.qualityOfWork.contains("no", ignoreCase = true) || it.qualityOfWork.contains("needs work", ignoreCase = true)
+    }
+
+    val completelyPct = if (totalSurveys > 0) (completelySatisfiedCount.toFloat() / totalSurveys) else 0f
+    val partiallyPct = if (totalSurveys > 0) (partiallySatisfiedCount.toFloat() / totalSurveys) else 0f
+    val dissatisfiedPct = if (totalSurveys > 0) (dissatisfiedCount.toFloat() / totalSurveys) else 0f
+
+    val categoryCounts = allReports.groupBy { it.category }.mapValues { it.value.size }
+    val locationRiskList = allReports.filter { it.status != "Resolved" }
+        .groupBy { it.location }
+        .mapValues { it.value.size }
+        .entries
+        .sortedByDescending { it.value }
+
+    val backgroundColor = when (settings.contrastMode) {
+        "Dark Contrast" -> Color(0xFF121212)
+        "Light Contrast" -> Color.White
+        "High Contrast" -> Color(0xFFF7F7F7)
+        else -> Color(0xFFF5F8F9)
+    }
+
+    val cardColor = if (settings.contrastMode == "Dark Contrast") Color(0xFF1E1E1E) else Color.White
+    val textColor = if (settings.contrastMode == "Dark Contrast") Color.White else Color(0xFF222222)
+    val subTextColor = if (settings.contrastMode == "Dark Contrast") Color(0xFFD0D0D0) else Color.Gray
+    val accentColor = if (settings.grayscaleMode) Color(0xFF444444) else Color(0xFFE1001B)
+
+    val titleSize = when (settings.textSize) {
+        "Small" -> 16.sp
+        "Large" -> 20.sp
+        "Extra Large" -> 22.sp
+        else -> 18.sp
+    }
+
+    val bodySize = when (settings.textSize) {
+        "Small" -> 12.sp
+        "Large" -> 15.sp
+        "Extra Large" -> 17.sp
+        else -> 14.sp
+    }
+
+    val smallSize = when (settings.textSize) {
+        "Small" -> 10.sp
+        "Large" -> 13.sp
+        "Extra Large" -> 15.sp
+        else -> 12.sp
+    }
+
+    val scrollState = rememberScrollState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundColor)
+    ) {
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = accentColor)
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Campus Analytics & Intelligence",
+                            fontSize = titleSize,
+                            fontWeight = if (settings.boldText) FontWeight.ExtraBold else FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            text = "Automated executive summary & exporting",
+                            fontSize = smallSize,
+                            color = subTextColor
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            AnalyticsPrintHelper.downloadPdfReport(context, allReports, surveysList, settings)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Print,
+                            contentDescription = "Print / Download PDF",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Download PDF", fontSize = smallSize, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            AnalyticsExcelHelper.downloadExcel(context, allReports, surveysList)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = "Download Excel",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Download Excel", fontSize = smallSize, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Executive Summary Card
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Assessment,
+                                contentDescription = "Executive Summary",
+                                tint = accentColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "📊 Executive Summary",
+                                fontSize = bodySize,
+                                fontWeight = FontWeight.Bold,
+                                color = textColor
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val topCat = categoryCounts.maxByOrNull { it.value }?.key ?: "General"
+                        val topLoc = locationRiskList.firstOrNull()?.key ?: "Campus-wide"
+
+                        val summaryText = if (total == 0) {
+                            "No report records currently available for analysis."
+                        } else {
+                            "Out of $total total filed reports, $resolved issues have been resolved (${String.format(Locale.getDefault(), "%.1f", resolutionRate)}% resolution rate). Category '$topCat' represents the highest incident volume (${categoryCounts.getOrDefault(topCat, 0)} reports). Priority location requiring maintenance dispatch: '$topLoc'."
+                        }
+
+                        Text(
+                            text = summaryText,
+                            fontSize = bodySize,
+                            color = textColor,
+                            lineHeight = (bodySize.value + 5).sp
+                        )
+                    }
+                }
+
+                // Student Survey Satisfaction Card
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "📋 Student Resolution Survey Feedback",
+                                fontSize = bodySize,
+                                fontWeight = FontWeight.Bold,
+                                color = textColor
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFF1976D2), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "$totalSurveys Answered",
+                                    fontSize = smallSize,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (totalSurveys == 0) {
+                            Text(
+                                text = "No survey responses recorded yet. Surveys automatically prompt students once their report is marked as Resolved.",
+                                fontSize = smallSize,
+                                color = subTextColor
+                            )
+                        } else {
+                            // Completely Satisfied
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("🟢 Completely Satisfied", fontSize = smallSize, color = textColor, fontWeight = FontWeight.Medium)
+                                    Text("$completelySatisfiedCount (${String.format(Locale.getDefault(), "%.0f", completelyPct * 100)}%)", fontSize = smallSize, color = subTextColor)
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                LinearProgressIndicator(
+                                    progress = { completelyPct },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = Color(0xFF2E7D32),
+                                    trackColor = Color(0xFFEEEEEE)
+                                )
+                            }
+
+                            // Partially Satisfied
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("🟡 Partially Satisfied", fontSize = smallSize, color = textColor, fontWeight = FontWeight.Medium)
+                                    Text("$partiallySatisfiedCount (${String.format(Locale.getDefault(), "%.0f", partiallyPct * 100)}%)", fontSize = smallSize, color = subTextColor)
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                LinearProgressIndicator(
+                                    progress = { partiallyPct },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = Color(0xFFF57C00),
+                                    trackColor = Color(0xFFEEEEEE)
+                                )
+                            }
+
+                            // Dissatisfied / Needs Work
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("🔴 Not Satisfied / Needs Work", fontSize = smallSize, color = textColor, fontWeight = FontWeight.Medium)
+                                    Text("$dissatisfiedCount (${String.format(Locale.getDefault(), "%.0f", dissatisfiedPct * 100)}%)", fontSize = smallSize, color = subTextColor)
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                LinearProgressIndicator(
+                                    progress = { dissatisfiedPct },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = Color(0xFFD32F2F),
+                                    trackColor = Color(0xFFEEEEEE)
+                                )
+                            }
+
+                            // Student Suggestions
+                            val suggestionsList = surveysList.mapNotNull { if (it.suggestions.isNotBlank()) it.suggestions else null }
+                            if (suggestionsList.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "💡 Recent Student Suggestions:",
+                                    fontSize = smallSize,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textColor
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                suggestionsList.take(3).forEach { suggestion ->
+                                    Text(
+                                        text = "• \"$suggestion\"",
+                                        fontSize = smallSize,
+                                        color = subTextColor,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Key Performance Metrics Grid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = cardColor)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("$total", fontSize = titleSize, fontWeight = FontWeight.Bold, color = accentColor)
+                            Text("Total Filed", fontSize = smallSize, color = subTextColor)
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = cardColor)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("${String.format(Locale.getDefault(), "%.0f", resolutionRate)}%", fontSize = titleSize, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            Text("Resolution Rate", fontSize = smallSize, color = subTextColor)
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = cardColor)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("$inReview", fontSize = titleSize, fontWeight = FontWeight.Bold, color = Color(0xFFE1001B))
+                            Text("Unaddressed", fontSize = smallSize, color = subTextColor)
+                        }
+                    }
+                }
+
+                // Category Distribution Breakdown
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Category Distribution",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (categoryCounts.isEmpty()) {
+                            Text("No category data available.", fontSize = smallSize, color = subTextColor)
+                        } else {
+                            categoryCounts.forEach { (cat, count) ->
+                                val pct = if (total > 0) count.toFloat() / total else 0f
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(cat, fontSize = smallSize, color = textColor, fontWeight = FontWeight.Medium)
+                                        Text("$count (${String.format(Locale.getDefault(), "%.0f", pct * 100)}%)", fontSize = smallSize, color = subTextColor)
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    LinearProgressIndicator(
+                                        progress = { pct },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp),
+                                        color = accentColor,
+                                        trackColor = Color(0xFFEEEEEE)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Location Hotspot Risk Scores
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Campus Hotspots & Risk Score",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (locationRiskList.isEmpty()) {
+                            Text("No unresolved location risks found.", fontSize = smallSize, color = Color(0xFF2E7D32))
+                        } else {
+                            locationRiskList.take(5).forEach { (loc, activeCount) ->
+                                val riskLevel = when {
+                                    activeCount >= 5 -> "CRITICAL"
+                                    activeCount >= 3 -> "HIGH"
+                                    else -> "MODERATE"
+                                }
+                                val badgeColor = when (riskLevel) {
+                                    "CRITICAL" -> Color(0xFFD32F2F)
+                                    "HIGH" -> Color(0xFFF57C00)
+                                    else -> Color(0xFF1976D2)
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(loc, fontSize = bodySize, fontWeight = FontWeight.SemiBold, color = textColor)
+                                        Text("$activeCount active unresolved issues", fontSize = smallSize, color = subTextColor)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .background(badgeColor, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(riskLevel, fontSize = (smallSize.value - 2).sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class ChatMessage(
+    val id: String = "",
+    val channelId: String = "",
+    val senderName: String = "",
+    val senderUid: String = "",
+    val senderRole: String = "",
+    val text: String = "",
+    val isAnonymous: Boolean = false,
+    val timestamp: Long = 0L,
+    val formattedTime: String = ""
+)
+
+@Composable
+fun CommunityChatScreen(
+    role: String,
+    currentUserName: String,
+    settings: AccessibilitySettings
+) {
+    val context = LocalContext.current
+    val db = FirebaseFirestore.getInstance()
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
+    val channels = listOf(
+        "lost_found" to "🔍 Lost & Found",
+        "general" to "📢 General Talk",
+        "facilities" to "🏫 Facilities",
+        "academics" to "📚 Study Groups",
+        "welfare" to "💡 Student Welfare"
+    )
+
+    var selectedChannel by remember { mutableStateOf("lost_found") }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var messageText by remember { mutableStateOf("") }
+    var isAnonymousPost by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(selectedChannel) {
+        isLoading = true
+        db.collection("community_messages")
+            .whereEqualTo("channelId", selectedChannel)
+            .orderBy("timestamp", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            val timeSec = doc.getTimestamp("timestamp")?.seconds ?: 0L
+                            val dateStr = if (timeSec > 0) {
+                                SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(timeSec * 1000))
+                            } else ""
+
+                            ChatMessage(
+                                id = doc.id,
+                                channelId = doc.getString("channelId") ?: "",
+                                senderName = doc.getString("senderName") ?: "Student",
+                                senderUid = doc.getString("senderUid") ?: "",
+                                senderRole = doc.getString("senderRole") ?: "Student",
+                                text = doc.getString("text") ?: "",
+                                isAnonymous = doc.getBoolean("isAnonymous") ?: false,
+                                timestamp = timeSec,
+                                formattedTime = dateStr
+                            )
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    messages = list
+                }
+                isLoading = false
+            }
+    }
+
+    val backgroundColor = when (settings.contrastMode) {
+        "Dark Contrast" -> Color(0xFF121212)
+        "Light Contrast" -> Color.White
+        "High Contrast" -> Color(0xFFF7F7F7)
+        else -> Color(0xFFF5F8F9)
+    }
+
+    val cardColor = if (settings.contrastMode == "Dark Contrast") Color(0xFF1E1E1E) else Color.White
+    val textColor = if (settings.contrastMode == "Dark Contrast") Color.White else Color(0xFF222222)
+    val subTextColor = if (settings.contrastMode == "Dark Contrast") Color(0xFFD0D0D0) else Color.Gray
+    val accentColor = if (settings.grayscaleMode) Color(0xFF444444) else Color(0xFFE1001B)
+
+    val bodySize = when (settings.textSize) {
+        "Small" -> 12.sp
+        "Large" -> 15.sp
+        "Extra Large" -> 17.sp
+        else -> 14.sp
+    }
+
+    val smallSize = when (settings.textSize) {
+        "Small" -> 10.sp
+        "Large" -> 13.sp
+        "Extra Large" -> 15.sp
+        else -> 12.sp
+    }
+
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundColor)
+            .padding(12.dp)
+    ) {
+        // Channel Selector Horizontal Row
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+        ) {
+            items(channels) { (channelKey, channelLabel) ->
+                val isSelected = selectedChannel == channelKey
+                Button(
+                    onClick = { selectedChannel = channelKey },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelected) accentColor else cardColor
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = channelLabel,
+                        color = if (isSelected) Color.White else textColor,
+                        fontSize = smallSize,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        // Chat Messages Box
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = accentColor)
+                }
+            } else if (messages.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "No messages yet in this community channel.\nBe the first to post!",
+                        color = subTextColor,
+                        fontSize = bodySize,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(messages) { msg ->
+                        val isMyMessage = currentUser != null && msg.senderUid == currentUser.uid
+                        val displaySender = if (msg.isAnonymous) "Anonymous Student" else msg.senderName
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = if (isMyMessage) Arrangement.End else Arrangement.Start
+                        ) {
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isMyMessage) {
+                                        if (settings.grayscaleMode) Color.DarkGray else Color(0xFFE1001B)
+                                    } else {
+                                        cardColor
+                                    }
+                                ),
+                                modifier = Modifier.widthIn(max = 280.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = displaySender,
+                                            fontSize = smallSize,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isMyMessage) Color.White else accentColor
+                                        )
+
+                                        if (msg.senderRole.equals("Admin", ignoreCase = true) || msg.senderRole.equals("Administrator", ignoreCase = true)) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(Color(0xFFFFC107), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text("ADMIN", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = msg.text,
+                                        fontSize = bodySize,
+                                        color = if (isMyMessage) Color.White else textColor
+                                    )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = msg.formattedTime,
+                                            fontSize = (smallSize.value - 2).sp,
+                                            color = if (isMyMessage) Color.White.copy(alpha = 0.8f) else subTextColor
+                                        )
+
+                                        if (role.equals("Administrator", ignoreCase = true) || role.equals("Admin", ignoreCase = true) || isMyMessage) {
+                                            IconButton(
+                                                onClick = {
+                                                    db.collection("community_messages").document(msg.id).delete()
+                                                },
+                                                modifier = Modifier.size(20.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete Message",
+                                                    tint = if (isMyMessage) Color.White else Color.Gray,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Anonymous Toggle Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Post anonymously in this channel",
+                fontSize = smallSize,
+                color = subTextColor
+            )
+            Switch(
+                checked = isAnonymousPost,
+                onCheckedChange = { isAnonymousPost = it },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = accentColor
+                )
+            )
+        }
+
+        // Bottom Message Input Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = messageText,
+                onValueChange = { messageText = it },
+                placeholder = { Text("Type a community message...", fontSize = bodySize) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = Color(0xFFDADDE2),
+                    focusedContainerColor = cardColor,
+                    unfocusedContainerColor = cardColor,
+                    focusedTextColor = textColor,
+                    unfocusedTextColor = textColor
+                ),
+                textStyle = TextStyle(fontSize = bodySize)
+            )
+
+            IconButton(
+                onClick = {
+                    if (messageText.isNotBlank() && currentUser != null) {
+                        val textToSend = messageText.trim()
+                        messageText = ""
+
+                        val msgData = hashMapOf(
+                            "channelId" to selectedChannel,
+                            "senderName" to if (isAnonymousPost) "Anonymous Student" else currentUserName,
+                            "senderUid" to currentUser.uid,
+                            "senderRole" to role,
+                            "text" to textToSend,
+                            "isAnonymous" to isAnonymousPost,
+                            "timestamp" to Timestamp.now()
+                        )
+
+                        db.collection("community_messages").add(msgData)
+                    }
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(accentColor, CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Send Message",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CampusPollsScreen(
+    role: String,
+    currentUserName: String,
+    settings: AccessibilitySettings
+) {
+    val context = LocalContext.current
+    val db = FirebaseFirestore.getInstance()
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
+    var polls by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var showCreatePollDialog by remember { mutableStateOf(false) }
+
+    val isAdmin = role.equals("Administrator", ignoreCase = true) || role.equals("Admin", ignoreCase = true)
+
+    LaunchedEffect(Unit) {
+        db.collection("campus_polls")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val list = snapshot.documents.map { doc ->
+                        val data = doc.data?.toMutableMap() ?: mutableMapOf()
+                        data["id"] = doc.id
+                        data
+                    }
+                    polls = list
+                }
+                isLoading = false
+            }
+    }
+
+    val backgroundColor = when (settings.contrastMode) {
+        "Dark Contrast" -> Color(0xFF121212)
+        "Light Contrast" -> Color.White
+        "High Contrast" -> Color(0xFFF7F7F7)
+        else -> Color(0xFFF5F8F9)
+    }
+
+    val cardColor = if (settings.contrastMode == "Dark Contrast") Color(0xFF1E1E1E) else Color.White
+    val textColor = if (settings.contrastMode == "Dark Contrast") Color.White else Color(0xFF222222)
+    val subTextColor = if (settings.contrastMode == "Dark Contrast") Color(0xFFD0D0D0) else Color.Gray
+    val accentColor = if (settings.grayscaleMode) Color(0xFF444444) else Color(0xFFE1001B)
+
+    val titleSize = when (settings.textSize) {
+        "Small" -> 16.sp
+        "Large" -> 20.sp
+        "Extra Large" -> 22.sp
+        else -> 18.sp
+    }
+
+    val bodySize = when (settings.textSize) {
+        "Small" -> 12.sp
+        "Large" -> 15.sp
+        "Extra Large" -> 17.sp
+        else -> 14.sp
+    }
+
+    val smallSize = when (settings.textSize) {
+        "Small" -> 10.sp
+        "Large" -> 13.sp
+        "Extra Large" -> 15.sp
+        else -> 12.sp
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundColor)
+    ) {
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = accentColor)
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Student Pulse Polls",
+                            fontSize = titleSize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            text = "Vote on campus topics & welfare initiatives",
+                            fontSize = smallSize,
+                            color = subTextColor
+                        )
+                    }
+
+                    if (isAdmin) {
+                        Button(
+                            onClick = { showCreatePollDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                        ) {
+                            Text("+ Poll", fontSize = smallSize, color = Color.White)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (polls.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "No active student polls available.",
+                            color = subTextColor,
+                            fontSize = bodySize
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(polls) { pollData ->
+                            val pollId = pollData["id"] as? String ?: ""
+                            val question = pollData["question"] as? String ?: ""
+                            val rawOptions = pollData["options"] as? List<Map<String, Any>> ?: emptyList()
+                            val votedUids = pollData["votedUids"] as? List<String> ?: emptyList()
+
+                            val myUid = currentUser?.uid ?: ""
+                            val hasVoted = votedUids.contains(myUid)
+
+                            val totalVotes = rawOptions.sumOf { (it["votes"] as? Long ?: 0L).toInt() }
+
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = cardColor),
+                                modifier = Modifier.fillMaxWidth(),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "📊 $question",
+                                        fontSize = bodySize,
+                                        fontWeight = FontWeight.Bold,
+                                        color = textColor
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    rawOptions.forEachIndexed { optIndex, optionMap ->
+                                        val optText = optionMap["text"] as? String ?: ""
+                                        val optVotes = (optionMap["votes"] as? Long ?: 0L).toInt()
+                                        val pct = if (totalVotes > 0) optVotes.toFloat() / totalVotes else 0f
+
+                                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    if (!hasVoted && myUid.isNotBlank()) {
+                                                        db.runTransaction { transaction ->
+                                                            val pollRef = db.collection("campus_polls").document(pollId)
+                                                            val snapshot = transaction.get(pollRef)
+
+                                                            val currentVoted = snapshot.get("votedUids") as? List<String> ?: emptyList()
+                                                            if (!currentVoted.contains(myUid)) {
+                                                                val currentOpts = snapshot.get("options") as? List<Map<String, Any>> ?: emptyList()
+                                                                val updatedOpts = currentOpts.mapIndexed { idx, opt ->
+                                                                    val mutableOpt = opt.toMutableMap()
+                                                                    if (idx == optIndex) {
+                                                                        val currentVal = (mutableOpt["votes"] as? Long ?: 0L).toInt()
+                                                                        mutableOpt["votes"] = currentVal + 1
+                                                                    }
+                                                                    mutableOpt
+                                                                }
+
+                                                                val updatedVoted = currentVoted + myUid
+                                                                transaction.update(pollRef, "options", updatedOpts)
+                                                                transaction.update(pollRef, "votedUids", updatedVoted)
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.outlinedButtonColors(
+                                                    containerColor = if (hasVoted) Color(0xFFF0F0F0) else Color.Transparent
+                                                ),
+                                                border = BorderStroke(1.dp, if (hasVoted) Color(0xFFDDDDDD) else accentColor)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(optText, fontSize = bodySize, color = textColor)
+                                                    if (hasVoted) {
+                                                        Text("$optVotes votes (${String.format(Locale.getDefault(), "%.0f", pct * 100)}%)", fontSize = smallSize, color = subTextColor)
+                                                    }
+                                                }
+                                            }
+
+                                            if (hasVoted) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { pct },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(4.dp),
+                                                    color = accentColor,
+                                                    trackColor = Color(0xFFEEEEEE)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "$totalVotes total votes",
+                                            fontSize = smallSize,
+                                            color = subTextColor
+                                        )
+
+                                        if (hasVoted) {
+                                            Text(
+                                                text = "✓ Voted",
+                                                fontSize = smallSize,
+                                                color = Color(0xFF2E7D32),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showCreatePollDialog) {
+            var newQuestion by remember { mutableStateOf("") }
+            var option1 by remember { mutableStateOf("") }
+            var option2 by remember { mutableStateOf("") }
+            var option3 by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showCreatePollDialog = false },
+                containerColor = cardColor,
+                title = { Text("Create Campus Poll", color = textColor, fontSize = bodySize, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = newQuestion,
+                            onValueChange = { newQuestion = it },
+                            label = { Text("Poll Question") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = option1,
+                            onValueChange = { option1 = it },
+                            label = { Text("Option 1") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = option2,
+                            onValueChange = { option2 = it },
+                            label = { Text("Option 2") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = option3,
+                            onValueChange = { option3 = it },
+                            label = { Text("Option 3 (Optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newQuestion.isNotBlank() && option1.isNotBlank() && option2.isNotBlank()) {
+                                showCreatePollDialog = false
+
+                                val opts = mutableListOf(
+                                    mapOf("text" to option1.trim(), "votes" to 0),
+                                    mapOf("text" to option2.trim(), "votes" to 0)
+                                )
+                                if (option3.isNotBlank()) {
+                                    opts.add(mapOf("text" to option3.trim(), "votes" to 0))
+                                }
+
+                                val pollData = hashMapOf(
+                                    "question" to newQuestion.trim(),
+                                    "options" to opts,
+                                    "votedUids" to emptyList<String>(),
+                                    "createdBy" to currentUserName,
+                                    "timestamp" to Timestamp.now()
+                                )
+
+                                db.collection("campus_polls").add(pollData)
+                            }
+                        }
+                    ) {
+                        Text("Create", color = accentColor, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCreatePollDialog = false }) {
+                        Text("Cancel", color = subTextColor)
+                    }
+                }
+            )
         }
     }
 }

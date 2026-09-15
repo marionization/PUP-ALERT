@@ -10,6 +10,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +27,10 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -121,8 +127,160 @@ fun SubmitReportScreen(
     var selectedCategory by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
 
+    // Feature 4: Smart Auto-Categorization & Live Duplicate Detection State
+    var autoSuggestedCategory by remember { mutableStateOf("") }
+    var duplicateReport by remember { mutableStateOf<Report?>(null) }
+
+    // Feature 5: Voice-to-Text State & Launcher
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == ComponentActivity.RESULT_OK) {
+            val spokenText = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                description = if (description.isBlank()) spokenText else "$description $spokenText"
+                Toast.makeText(context, "Voice input recognized!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun launchSpeechToText() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to describe the issue...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: Exception) {
+            Toast.makeText(
+                context,
+                "Speech recognition is not supported on this device.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    fun detectCategory(text: String): String {
+        val lower = text.lowercase(Locale.getDefault())
+
+        val safetyKeywords = listOf("hazard", "fire", "smoke", "exposed", "slippery", "emergency", "danger", "alarm", "lock", "gate", "security", "injury", "glass", "sharp", "knife", "threat", "fight")
+        val maintenanceKeywords = listOf("leak", "pipe", "water", "plumbing", "electrical", "wire", "plug", "outlet", "light", "bulb", "fan", "aircon", "ac", "broken", "damaged", "repair", "flush", "toilet", "faucet", "sink", "drain")
+        val cleanlinessKeywords = listOf("trash", "garbage", "dirty", "smell", "odor", "waste", "spill", "mess", "clutter", "restroom", "washroom", "clean", "dust")
+        val equipmentKeywords = listOf("projector", "tv", "screen", "computer", "pc", "monitor", "speaker", "mic", "microphone", "lab", "printer", "appliance", "mouse", "keyboard")
+        val facilitiesKeywords = listOf("door", "window", "wall", "ceiling", "roof", "elevator", "stairs", "desk", "chair", "table", "board", "building", "hall", "room")
+
+        return when {
+            safetyKeywords.any { lower.contains(it) } -> "Safety"
+            maintenanceKeywords.any { lower.contains(it) } -> "Maintenance"
+            cleanlinessKeywords.any { lower.contains(it) } -> "Cleanliness"
+            equipmentKeywords.any { lower.contains(it) } -> "Equipment"
+            facilitiesKeywords.any { lower.contains(it) } -> "Facilities"
+            else -> ""
+        }
+    }
+
+    LaunchedEffect(reportTitle, description) {
+        if (selectedCategory.isBlank() || selectedCategory == autoSuggestedCategory) {
+            val detected = detectCategory("$reportTitle $description")
+            if (detected.isNotBlank()) {
+                selectedCategory = detected
+                autoSuggestedCategory = detected
+            }
+        }
+    }
+
+    LaunchedEffect(location, reportTitle) {
+        val locQuery = location.trim().lowercase(Locale.getDefault())
+        val titleQuery = reportTitle.trim().lowercase(Locale.getDefault())
+
+        if (locQuery.length >= 3 || titleQuery.length >= 4) {
+            db.collection("reports")
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    val match = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            val docStatus = doc.getString("status") ?: "In Review"
+                            if (docStatus == "Resolved") return@mapNotNull null
+
+                            val docTitle = doc.getString("title") ?: ""
+                            val docLoc = doc.getString("location") ?: ""
+
+                            val locMatch = locQuery.length >= 3 && docLoc.lowercase(Locale.getDefault()).contains(locQuery)
+                            val titleMatch = titleQuery.length >= 4 && docTitle.lowercase(Locale.getDefault()).contains(titleQuery)
+
+                            if (locMatch || titleMatch) {
+                                Report(
+                                    id = doc.id,
+                                    title = docTitle,
+                                    category = doc.getString("category") ?: "",
+                                    location = docLoc,
+                                    description = doc.getString("description") ?: "",
+                                    imageUrl = doc.getString("imageUrl"),
+                                    mediaUrl = doc.getString("mediaUrl") ?: "",
+                                    mediaType = doc.getString("mediaType") ?: "",
+                                    status = docStatus,
+                                    dateSubmitted = doc.getString("dateSubmitted") ?: "",
+                                    reporter = doc.getString("reporter") ?: ""
+                                )
+                            } else null
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }.firstOrNull()
+
+                    duplicateReport = match
+                }
+        } else {
+            duplicateReport = null
+        }
+    }
+
     // Anonymous reporting state
     var isAnonymous by remember { mutableStateOf(false) }
+
+    // Feature 3: Drafts & Offline Local Auto-Save State
+    val draftPrefs = remember { context.getSharedPreferences("report_drafts", Context.MODE_PRIVATE) }
+    var hasDraftRestored by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val savedTitle = draftPrefs.getString("draft_title", "") ?: ""
+        val savedCategory = draftPrefs.getString("draft_category", "") ?: ""
+        val savedLocation = draftPrefs.getString("draft_location", "") ?: ""
+        val savedDescription = draftPrefs.getString("draft_description", "") ?: ""
+
+        if (savedTitle.isNotBlank() || savedLocation.isNotBlank() || savedDescription.isNotBlank()) {
+            reportTitle = savedTitle
+            selectedCategory = savedCategory
+            location = savedLocation
+            description = savedDescription
+            hasDraftRestored = true
+        }
+    }
+
+    fun saveDraft() {
+        draftPrefs.edit()
+            .putString("draft_title", reportTitle)
+            .putString("draft_category", selectedCategory)
+            .putString("draft_location", location)
+            .putString("draft_description", description)
+            .apply()
+        Toast.makeText(context, "Draft saved locally!", Toast.LENGTH_SHORT).show()
+    }
+
+    fun clearDraft() {
+        draftPrefs.edit().clear().apply()
+        reportTitle = ""
+        selectedCategory = ""
+        location = ""
+        description = ""
+        hasDraftRestored = false
+    }
 
     var selectedMediaUri by remember { mutableStateOf<Uri?>(null) }
     var selectedMediaType by remember { mutableStateOf("") }
@@ -351,6 +509,45 @@ fun SubmitReportScreen(
                 modifier = Modifier.padding(bottom = 20.dp)
             )
 
+            if (hasDraftRestored) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp),
+                    shape = inputShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (settings.grayscaleMode) Color(0xFFE9E9E9) else Color(0xFFE3F2FD)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF1976D2))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📝 Restored saved report draft",
+                            fontSize = smallSize,
+                            color = Color(0xFF1565C0),
+                            fontWeight = FontWeight.Medium
+                        )
+                        TextButton(
+                            onClick = { clearDraft() },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text(
+                                text = "Discard Draft",
+                                color = accentColor,
+                                fontSize = smallSize,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
             Text(
                 text = "Report Title *",
                 fontSize = labelSize,
@@ -473,6 +670,26 @@ fun SubmitReportScreen(
                             }
                         )
                     }
+                }
+            }
+
+            if (autoSuggestedCategory.isNotBlank() && selectedCategory == autoSuggestedCategory) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lightbulb,
+                        contentDescription = "Auto-suggested Category",
+                        tint = Color(0xFFFF8F00),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Auto-suggested based on title/description",
+                        fontSize = smallSize,
+                        color = Color(0xFFFF8F00)
+                    )
                 }
             }
 
@@ -601,13 +818,92 @@ fun SubmitReportScreen(
                 )
             )
 
-            Text(
-                text = "Description *",
-                fontSize = labelSize,
-                fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Normal,
-                color = textColor,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+            if (duplicateReport != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp),
+                    shape = inputShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (settings.grayscaleMode) Color(0xFFE9E9E9) else Color(0xFFFFF8E1)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFFFFB300))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = "Potential Duplicate",
+                                tint = Color(0xFFB78103),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Potential Duplicate Report Found",
+                                fontSize = bodySize,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB78103)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "An active report '${duplicateReport?.title}' in '${duplicateReport?.location}' is currently ${duplicateReport?.status}.",
+                            fontSize = smallSize,
+                            color = Color(0xFFB78103)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(context, ReportDetailActivity::class.java).apply {
+                                    putExtra("id", duplicateReport?.id)
+                                    putExtra("title", duplicateReport?.title)
+                                    putExtra("category", duplicateReport?.category)
+                                    putExtra("location", duplicateReport?.location)
+                                    putExtra("description", duplicateReport?.description)
+                                    putExtra("status", duplicateReport?.status)
+                                    putExtra("reporter", duplicateReport?.reporter)
+                                }
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text(
+                                text = "View Active Report",
+                                color = accentColor,
+                                fontSize = smallSize,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Description *",
+                    fontSize = labelSize,
+                    fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Normal,
+                    color = textColor
+                )
+
+                IconButton(
+                    onClick = { launchSpeechToText() },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = "Voice Input Speech-to-Text",
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
 
             OutlinedTextField(
                 value = description,
@@ -779,8 +1075,30 @@ fun SubmitReportScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                OutlinedButton(
+                    onClick = { saveDraft() },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(buttonHeight),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        width = 1.dp,
+                        brush = SolidColor(fieldBorderColor)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = cardColor
+                    ),
+                    enabled = !isLoading && (reportTitle.isNotBlank() || location.isNotBlank() || description.isNotBlank())
+                ) {
+                    Text(
+                        text = "Save Draft",
+                        color = textColor,
+                        fontSize = (bodySize.value - 2).sp,
+                        fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+
                 OutlinedButton(
                     onClick = onCancel,
                     modifier = Modifier
@@ -798,7 +1116,7 @@ fun SubmitReportScreen(
                     Text(
                         text = "Cancel",
                         color = textColor,
-                        fontSize = bodySize,
+                        fontSize = (bodySize.value - 2).sp,
                         fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Normal
                     )
                 }
@@ -887,6 +1205,39 @@ fun SubmitReportScreen(
 
                             reportRef.set(reportData)
                                 .addOnSuccessListener {
+                                    val adminNotification = hashMapOf(
+                                        "reportId" to reportRef.id,
+                                        "title" to "New Report Submitted",
+                                        "message" to if (isAnonymous) {
+                                            "A new report \"${reportTitle.trim()}\" was submitted by Anonymous Student."
+                                        } else {
+                                            "A new report \"${reportTitle.trim()}\" was submitted by $reporterName."
+                                        },
+                                        "reportTitle" to reportTitle.trim(),
+                                        "status" to "In Review",
+                                        "reporter" to visibleReporter,
+                                        "isAnonymous" to isAnonymous,
+                                        "targetRole" to "Admin",
+                                        "targetUser" to "",
+                                        "type" to "new_report",
+                                        "read" to false,
+                                        "timestamp" to Timestamp.now()
+                                    )
+                                    db.collection("notifications").add(adminNotification)
+
+                                    NotificationHelper.createNotificationChannel(context)
+                                    NotificationHelper.showNotification(
+                                        context = context,
+                                        title = "Report Submitted",
+                                        message = if (isAnonymous) {
+                                            "Your report \"${reportTitle.trim()}\" was submitted anonymously."
+                                        } else {
+                                            "Your report \"${reportTitle.trim()}\" was submitted successfully."
+                                        }
+                                    )
+
+                                    draftPrefs.edit().clear().apply()
+
                                     isLoading = false
 
                                     Toast.makeText(
