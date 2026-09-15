@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import Activity.ui.theme.SeriousModeTheme
@@ -50,12 +51,14 @@ import java.util.Date
 import java.util.Locale
 
 class SubmitReportActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val reporterName = prefs.getString("user_name", "Student") ?: "Student"
         val reporterStudentId = prefs.getString("student_id", "") ?: ""
+
         val settings = AccessibilitySettings(
             textSize = prefs.getString("access_text_size", "Default") ?: "Default",
             boldText = prefs.getBoolean("access_bold_text", false),
@@ -118,6 +121,9 @@ fun SubmitReportScreen(
     var selectedCategory by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
 
+    // Anonymous reporting state
+    var isAnonymous by remember { mutableStateOf(false) }
+
     var selectedMediaUri by remember { mutableStateOf<Uri?>(null) }
     var selectedMediaType by remember { mutableStateOf("") }
     var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
@@ -133,20 +139,36 @@ fun SubmitReportScreen(
         "High Contrast" -> Color(0xFFF7F7F7)
         else -> Color(0xFFF9F9FB)
     }
+
     val cardColor = when (settings.contrastMode) {
         "Dark Contrast" -> Color(0xFF1E1E1E)
         else -> Color.White
     }
+
+    val anonymousCardColor = when (settings.contrastMode) {
+        "Dark Contrast" -> Color(0xFF2A2A2A)
+        else -> Color(0xFFFFF5F5)
+    }
+
     val textColor = when (settings.contrastMode) {
         "Dark Contrast" -> Color.White
         else -> Color(0xFF222222)
     }
+
     val subTextColor = when (settings.contrastMode) {
         "Dark Contrast" -> Color(0xFFD0D0D0)
         else -> Color.Gray
     }
+
     val fieldBorderColor =
-        if (settings.contrastMode == "Dark Contrast") Color(0xFF666666) else Color(0xFFDADDE2)
+        if (settings.contrastMode == "Dark Contrast") {
+            Color(0xFF666666)
+        } else {
+            Color(0xFFDADDE2)
+        }
+
+    val accentColor =
+        if (settings.grayscaleMode) Color(0xFF444444) else Color(0xFFE1001B)
 
     val titleSize = when (settings.textSize) {
         "Small" -> 16.sp
@@ -154,18 +176,21 @@ fun SubmitReportScreen(
         "Extra Large" -> 22.sp
         else -> 18.sp
     }
+
     val labelSize = when (settings.textSize) {
         "Small" -> 12.sp
         "Large" -> 16.sp
         "Extra Large" -> 18.sp
         else -> 14.sp
     }
+
     val bodySize = when (settings.textSize) {
         "Small" -> 12.sp
         "Large" -> 15.sp
         "Extra Large" -> 17.sp
         else -> 14.sp
     }
+
     val smallSize = when (settings.textSize) {
         "Small" -> 10.sp
         "Large" -> 13.sp
@@ -183,13 +208,13 @@ fun SubmitReportScreen(
         focusedTextColor = textColor,
         unfocusedTextColor = textColor,
         disabledTextColor = subTextColor,
-        focusedBorderColor = Color(0xFFE1001B),
+        focusedBorderColor = accentColor,
         unfocusedBorderColor = fieldBorderColor,
         disabledBorderColor = fieldBorderColor,
         focusedContainerColor = cardColor,
         unfocusedContainerColor = cardColor,
         disabledContainerColor = cardColor,
-        cursorColor = Color(0xFFE1001B),
+        cursorColor = accentColor,
         focusedPlaceholderColor = subTextColor,
         unfocusedPlaceholderColor = subTextColor,
         disabledPlaceholderColor = subTextColor
@@ -237,13 +262,18 @@ fun SubmitReportScreen(
         if (uri == null) {
             Toast.makeText(
                 context,
-                if (pendingAction == "video") "Failed to create video file" else "Failed to create photo file",
+                if (pendingAction == "video") {
+                    "Failed to create video file"
+                } else {
+                    "Failed to create photo file"
+                },
                 Toast.LENGTH_SHORT
             ).show()
             return@rememberLauncherForActivityResult
         }
 
         pendingCaptureUri = uri
+
         if (pendingAction == "photo") {
             takePictureLauncher.launch(uri)
         } else {
@@ -253,7 +283,9 @@ fun SubmitReportScreen(
 
     fun launchCameraCapture(type: String) {
         pendingAction = type
-        if (ContextCompat.checkSelfPermission(
+
+        if (
+            ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
@@ -264,11 +296,16 @@ fun SubmitReportScreen(
             )
 
             if (uri == null) {
-                Toast.makeText(context, "Failed to prepare media file", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    "Failed to prepare media file",
+                    Toast.LENGTH_SHORT
+                ).show()
                 return
             }
 
             pendingCaptureUri = uri
+
             if (type == "photo") {
                 takePictureLauncher.launch(uri)
             } else {
@@ -292,7 +329,13 @@ fun SubmitReportScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (settings.grayscaleMode) Color(0xFFF2F2F2) else backgroundColor)
+            .background(
+                if (settings.grayscaleMode) {
+                    Color(0xFFF2F2F2)
+                } else {
+                    backgroundColor
+                }
+            )
     ) {
         Column(
             modifier = Modifier
@@ -315,10 +358,16 @@ fun SubmitReportScreen(
                 color = textColor,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
+
             OutlinedTextField(
                 value = reportTitle,
                 onValueChange = { reportTitle = it },
-                placeholder = { Text("e.g., Broken classroom door", fontSize = bodySize) },
+                placeholder = {
+                    Text(
+                        "e.g., Broken classroom door",
+                        fontSize = bodySize
+                    )
+                },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -338,6 +387,7 @@ fun SubmitReportScreen(
                 color = textColor,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
+
             Box(
                 modifier = Modifier
                     .widthIn(min = 150.dp, max = 220.dp)
@@ -404,12 +454,14 @@ fun SubmitReportScreen(
                                         fontSize = bodySize,
                                         color = textColor
                                     )
+
                                     if (selectedCategory == option) {
                                         Spacer(modifier = Modifier.weight(1f))
+
                                         Icon(
                                             imageVector = Icons.Filled.Check,
                                             contentDescription = "Selected",
-                                            tint = Color(0xFFE1001B),
+                                            tint = accentColor,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -431,19 +483,74 @@ fun SubmitReportScreen(
                 color = textColor,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
+
             OutlinedTextField(
-                value = reporterName,
+                value = if (isAnonymous) "Anonymous Student" else reporterName,
                 onValueChange = {},
                 enabled = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 14.dp),
+                    .padding(bottom = 10.dp),
                 shape = inputShape,
                 colors = textFieldColors,
                 textStyle = TextStyle(fontSize = bodySize)
             )
 
-            if (reporterStudentId.isNotBlank()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                shape = inputShape,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (settings.grayscaleMode) {
+                        Color(0xFFE9E9E9)
+                    } else {
+                        anonymousCardColor
+                    }
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Submit anonymously",
+                            fontSize = bodySize,
+                            fontWeight = if (settings.boldText) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Medium
+                            },
+                            color = textColor
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "Your name and student ID will be hidden from administrators.",
+                            fontSize = smallSize,
+                            color = subTextColor
+                        )
+                    }
+
+                    Switch(
+                        checked = isAnonymous,
+                        onCheckedChange = { isAnonymous = it },
+                        enabled = !isLoading,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = accentColor,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = fieldBorderColor
+                        )
+                    )
+                }
+            }
+
+            if (!isAnonymous && reporterStudentId.isNotBlank()) {
                 Text(
                     text = "Student ID",
                     fontSize = labelSize,
@@ -451,6 +558,7 @@ fun SubmitReportScreen(
                     color = textColor,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
+
                 OutlinedTextField(
                     value = reporterStudentId,
                     onValueChange = {},
@@ -471,10 +579,16 @@ fun SubmitReportScreen(
                 color = textColor,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
+
             OutlinedTextField(
                 value = location,
                 onValueChange = { location = it },
-                placeholder = { Text("e.g., Building A, Room 301", fontSize = bodySize) },
+                placeholder = {
+                    Text(
+                        "e.g., Building A, Room 301",
+                        fontSize = bodySize
+                    )
+                },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -494,10 +608,16 @@ fun SubmitReportScreen(
                 color = textColor,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
+
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                placeholder = { Text("Describe the issue in detail...", fontSize = bodySize) },
+                placeholder = {
+                    Text(
+                        "Describe the issue in detail...",
+                        fontSize = bodySize
+                    )
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(if (settings.largeButtons) 110.dp else 90.dp)
@@ -527,7 +647,7 @@ fun SubmitReportScreen(
                     .height(previewHeight)
                     .border(
                         1.dp,
-                        if (showMediaError) Color(0xFFE1001B) else fieldBorderColor,
+                        if (showMediaError) accentColor else fieldBorderColor,
                         cardShape
                     )
                     .background(cardColor, cardShape)
@@ -562,12 +682,14 @@ fun SubmitReportScreen(
                                         Icons.Filled.CameraAlt
                                     },
                                     contentDescription = "Captured Media",
-                                    tint = Color(0xFFE1001B),
+                                    tint = accentColor,
                                     modifier = Modifier.size(
                                         if (settings.largeButtons) 50.dp else 42.dp
                                     )
                                 )
+
                                 Spacer(modifier = Modifier.height(8.dp))
+
                                 Text(
                                     text = if (selectedMediaType == "video") {
                                         "Video captured"
@@ -582,7 +704,9 @@ fun SubmitReportScreen(
                                     },
                                     color = textColor
                                 )
+
                                 Spacer(modifier = Modifier.height(4.dp))
+
                                 Text(
                                     text = "Ready to upload with your report",
                                     fontSize = smallSize,
@@ -603,7 +727,7 @@ fun SubmitReportScreen(
                                 .align(Alignment.TopEnd)
                                 .padding(4.dp)
                                 .size(32.dp)
-                                .background(Color(0xFFE1001B), CircleShape)
+                                .background(accentColor, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Close,
@@ -617,15 +741,19 @@ fun SubmitReportScreen(
                         Icon(
                             imageVector = Icons.Filled.CameraAlt,
                             contentDescription = null,
-                            tint = if (showMediaError) Color(0xFFE1001B) else Color(0xFF929292)
+                            tint = if (showMediaError) accentColor else Color(0xFF929292)
                         )
+
                         Spacer(modifier = Modifier.height(8.dp))
+
                         Text(
                             text = "Tap to open camera",
                             fontSize = bodySize,
-                            color = if (showMediaError) Color(0xFFE1001B) else Color(0xFF929292)
+                            color = if (showMediaError) accentColor else Color(0xFF929292)
                         )
+
                         Spacer(modifier = Modifier.height(4.dp))
+
                         Text(
                             text = "Take a photo or record a video",
                             fontSize = smallSize,
@@ -637,9 +765,10 @@ fun SubmitReportScreen(
 
             if (showMediaError) {
                 Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
                     text = "Photo or video evidence is required.",
-                    color = Color(0xFFE1001B),
+                    color = accentColor,
                     fontSize = smallSize
                 )
             }
@@ -661,7 +790,9 @@ fun SubmitReportScreen(
                         width = 1.dp,
                         brush = SolidColor(fieldBorderColor)
                     ),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = cardColor),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = cardColor
+                    ),
                     enabled = !isLoading
                 ) {
                     Text(
@@ -674,7 +805,8 @@ fun SubmitReportScreen(
 
                 Button(
                     onClick = {
-                        if (reportTitle.isBlank() ||
+                        if (
+                            reportTitle.isBlank() ||
                             selectedCategory.isBlank() ||
                             location.isBlank() ||
                             description.isBlank()
@@ -697,7 +829,19 @@ fun SubmitReportScreen(
                             return@Button
                         }
 
+                        val currentUser = FirebaseAuth.getInstance().currentUser
+
+                        if (currentUser == null) {
+                            Toast.makeText(
+                                context,
+                                "Your session has expired. Please log in again.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+
                         isLoading = true
+
                         val currentDate = SimpleDateFormat(
                             "MMMM d, yyyy",
                             Locale.getDefault()
@@ -705,6 +849,19 @@ fun SubmitReportScreen(
 
                         fun saveReportToFirestore(mediaUrl: String, mediaType: String) {
                             val reportRef = db.collection("reports").document()
+
+                            val visibleReporter = if (isAnonymous) {
+                                "Anonymous Student"
+                            } else {
+                                reporterName
+                            }
+
+                            val visibleStudentId = if (isAnonymous) {
+                                ""
+                            } else {
+                                reporterStudentId
+                            }
+
                             val reportData = hashMapOf(
                                 "reportId" to reportRef.id,
                                 "title" to reportTitle.trim(),
@@ -713,8 +870,15 @@ fun SubmitReportScreen(
                                 "description" to description.trim(),
                                 "status" to "In Review",
                                 "dateSubmitted" to currentDate,
-                                "reporter" to reporterName,
-                                "reporterStudentId" to reporterStudentId,
+
+                                // Anonymous-report settings
+                                "isAnonymous" to isAnonymous,
+                                "reporter" to visibleReporter,
+                                "reporterStudentId" to visibleStudentId,
+
+                                // Private report ownership field
+                                "reporterUid" to currentUser.uid,
+
                                 "mediaUrl" to mediaUrl,
                                 "mediaType" to mediaType,
                                 "imageUrl" to if (mediaType == "image") mediaUrl else "",
@@ -724,15 +888,22 @@ fun SubmitReportScreen(
                             reportRef.set(reportData)
                                 .addOnSuccessListener {
                                     isLoading = false
+
                                     Toast.makeText(
                                         context,
-                                        "Report Submitted Successfully",
+                                        if (isAnonymous) {
+                                            "Anonymous report submitted successfully"
+                                        } else {
+                                            "Report submitted successfully"
+                                        },
                                         Toast.LENGTH_SHORT
                                     ).show()
+
                                     onCancel()
                                 }
                                 .addOnFailureListener { e ->
                                     isLoading = false
+
                                     Toast.makeText(
                                         context,
                                         "Error: ${e.message}",
@@ -742,8 +913,16 @@ fun SubmitReportScreen(
                         }
 
                         val uri = selectedMediaUri!!
+
                         val fileName =
-                            "reports/${System.currentTimeMillis()}_${if (selectedMediaType == "video") "video.mp4" else "image.jpg"}"
+                            "reports/${currentUser.uid}/${System.currentTimeMillis()}_${
+                                if (selectedMediaType == "video") {
+                                    "video.mp4"
+                                } else {
+                                    "image.jpg"
+                                }
+                            }"
+
                         val storageRef = storage.reference.child(fileName)
 
                         storageRef.putFile(uri)
@@ -757,6 +936,7 @@ fun SubmitReportScreen(
                                     }
                                     .addOnFailureListener { e ->
                                         isLoading = false
+
                                         Toast.makeText(
                                             context,
                                             "Failed to get file URL: ${e.message}",
@@ -766,6 +946,7 @@ fun SubmitReportScreen(
                             }
                             .addOnFailureListener { e ->
                                 isLoading = false
+
                                 Toast.makeText(
                                     context,
                                     "Upload failed: ${e.message}",
@@ -776,7 +957,9 @@ fun SubmitReportScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(buttonHeight),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1001B)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accentColor
+                    ),
                     enabled = !isLoading && isFormValid
                 ) {
                     Text(
@@ -815,7 +998,10 @@ fun SubmitReportScreen(
                             launchCameraCapture("photo")
                         }
                     ) {
-                        Text("Take Photo", color = Color(0xFFE1001B))
+                        Text(
+                            text = "Take Photo",
+                            color = accentColor
+                        )
                     }
                 },
                 dismissButton = {
@@ -825,7 +1011,10 @@ fun SubmitReportScreen(
                             launchCameraCapture("video")
                         }
                     ) {
-                        Text("Record Video", color = Color(0xFFE1001B))
+                        Text(
+                            text = "Record Video",
+                            color = accentColor
+                        )
                     }
                 }
             )
@@ -835,20 +1024,35 @@ fun SubmitReportScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = if (settings.reduceMotion) 0.2f else 0.3f)),
+                    .background(
+                        Color.Black.copy(
+                            alpha = if (settings.reduceMotion) 0.2f else 0.3f
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFFE1001B))
+                CircularProgressIndicator(color = accentColor)
             }
         }
     }
 }
 
-private fun createTempMediaUri(context: Context, isVideo: Boolean): Uri? {
+private fun createTempMediaUri(
+    context: Context,
+    isVideo: Boolean
+): Uri? {
     return try {
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val timeStamp = SimpleDateFormat(
+            "yyyyMMdd_HHmmss",
+            Locale.getDefault()
+        ).format(Date())
+
         val file = File.createTempFile(
-            if (isVideo) "REPORT_VIDEO_$timeStamp" else "REPORT_IMAGE_$timeStamp",
+            if (isVideo) {
+                "REPORT_VIDEO_$timeStamp"
+            } else {
+                "REPORT_IMAGE_$timeStamp"
+            },
             if (isVideo) ".mp4" else ".jpg",
             context.cacheDir
         )
