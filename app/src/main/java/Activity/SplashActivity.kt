@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.seriousmode.MainActivity
 import com.example.seriousmode.R
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -27,7 +28,7 @@ class SplashActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
-        navigateToMain()
+        navigateToNextScreen()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,7 +48,7 @@ class SplashActivity : AppCompatActivity() {
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED -> {
-                    navigateToMain()
+                    navigateToNextScreen()
                 }
 
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
@@ -64,12 +65,29 @@ class SplashActivity : AppCompatActivity() {
                 }
             }
         } else {
-            navigateToMain()
+            navigateToNextScreen()
         }
     }
 
-    private fun navigateToMain() {
-        startActivity(Intent(this, MainActivity::class.java))
-        finish()
+    private fun navigateToNextScreen() {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+        val role = prefs.getString("role", "") ?: ""
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if ((isLoggedIn || currentUser != null) && role.isNotBlank()) {
+            val intent = Intent(this, NextActivity::class.java).apply {
+                putExtra("role", role)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(intent)
+            finish()
+        } else {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(intent)
+            finish()
+        }
     }
 }

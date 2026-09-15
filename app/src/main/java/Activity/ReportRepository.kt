@@ -16,7 +16,10 @@ data class Report(
     val reporter: String = "",
     val timestamp: Long = 0L,
     val averageRating: Double = 0.0,
-    val ratingCount: Int = 0
+    val ratingCount: Int = 0,
+    val isAnonymous: Boolean = false,
+    val reporterUid: String = "",
+    val reporterStudentId: String = ""
 )
 
 object ReportRepository {

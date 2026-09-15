@@ -48,6 +48,20 @@ class MainActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+        val role = prefs.getString("role", "") ?: ""
+
+        if ((isLoggedIn || auth.currentUser != null) && role.isNotBlank()) {
+            val intent = Intent(this, NextActivity::class.java).apply {
+                putExtra("role", role)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(intent)
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
 
         initViews()
@@ -136,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         if (email == adminEmail && password == adminPassword) {
             val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
             prefs.edit()
+                .putBoolean("is_logged_in", true)
                 .putString("user_name", "Administrator")
                 .putString("student_first_name", "Administrator")
                 .putString("student_id", "")
@@ -327,6 +342,7 @@ class MainActivity : AppCompatActivity() {
 
                     val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                     prefs.edit()
+                        .putBoolean("is_logged_in", true)
                         .putString("user_name", fullName)
                         .putString("student_first_name", displayFirstName)
                         .putString("student_id", studentId)

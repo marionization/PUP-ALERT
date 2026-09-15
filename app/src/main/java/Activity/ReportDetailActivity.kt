@@ -28,17 +28,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -50,7 +53,11 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +73,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -90,6 +98,8 @@ data class ReportUiData(
     val status: String = "",
     val dateSubmitted: String = "",
     val reporter: String = "",
+    val isAnonymous: Boolean = false,
+    val reporterUid: String = "",
     val adminUpdateMediaUrl: String = "",
     val adminUpdateMediaType: String = "",
     val adminNote: String = ""
@@ -138,6 +148,8 @@ class ReportDetailActivity : ComponentActivity() {
         val initialStatus = intent.getStringExtra("status") ?: ""
         val initialDateSubmitted = intent.getStringExtra("dateSubmitted") ?: ""
         val initialReporter = intent.getStringExtra("reporter") ?: ""
+        val initialIsAnonymous = intent.getBooleanExtra("isAnonymous", false)
+        val initialReporterUid = intent.getStringExtra("reporterUid") ?: ""
 
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val fullUserName = prefs.getString("user_name", "Student") ?: "Student"
@@ -158,7 +170,9 @@ class ReportDetailActivity : ComponentActivity() {
             mediaType = initialMediaType,
             status = initialStatus,
             dateSubmitted = initialDateSubmitted,
-            reporter = initialReporter
+            reporter = initialReporter,
+            isAnonymous = initialIsAnonymous,
+            reporterUid = initialReporterUid
         )
 
         setContent {
@@ -209,6 +223,8 @@ fun ReportDetailScreenHost(
                             status = doc.getString("status") ?: fallbackReport.status,
                             dateSubmitted = doc.getString("dateSubmitted") ?: fallbackReport.dateSubmitted,
                             reporter = doc.getString("reporter") ?: fallbackReport.reporter,
+                            isAnonymous = doc.getBoolean("isAnonymous") ?: fallbackReport.isAnonymous,
+                            reporterUid = doc.getString("reporterUid") ?: fallbackReport.reporterUid,
                             adminUpdateMediaUrl = doc.getString("adminUpdateMediaUrl") ?: "",
                             adminUpdateMediaType = doc.getString("adminUpdateMediaType") ?: "",
                             adminNote = doc.getString("adminNote") ?: ""
@@ -250,6 +266,8 @@ fun ReportDetailScreenHost(
             status = reportData.status,
             dateSubmitted = reportData.dateSubmitted,
             reporter = reportData.reporter,
+            isAnonymous = reportData.isAnonymous,
+            reporterUid = reportData.reporterUid,
             adminUpdateMediaUrl = reportData.adminUpdateMediaUrl,
             adminUpdateMediaType = reportData.adminUpdateMediaType,
             adminNote = reportData.adminNote,
@@ -275,6 +293,8 @@ fun ReportDetailScreen(
     status: String,
     dateSubmitted: String,
     reporter: String,
+    isAnonymous: Boolean = false,
+    reporterUid: String = "",
     adminUpdateMediaUrl: String,
     adminUpdateMediaType: String,
     adminNote: String,
@@ -299,6 +319,39 @@ fun ReportDetailScreen(
     var userReviewText by remember { mutableStateOf("") }
     var userRating by remember { mutableIntStateOf(5) }
     var hasExistingUserReview by remember { mutableStateOf(false) }
+
+    // Resolved Experience Survey State
+    var showSurveyDialog by remember { mutableStateOf(false) }
+    var hasCompletedSurvey by remember { mutableStateOf(false) }
+    var surveySpeed by remember { mutableStateOf("Satisfied") }
+    var surveyQuality by remember { mutableStateOf("Yes, completely") }
+    var surveyCommunication by remember { mutableStateOf("Very Clear") }
+    var surveySuggestions by remember { mutableStateOf("") }
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+    val myUid = currentUser?.uid ?: ""
+
+    LaunchedEffect(reportId, myUid) {
+        if (reportId.isNotEmpty() && myUid.isNotEmpty()) {
+            db.collection("reports")
+                .document(reportId)
+                .collection("surveys")
+                .document(myUid)
+                .addSnapshotListener { snapshot, _ ->
+                    if (snapshot != null && snapshot.exists()) {
+                        hasCompletedSurvey = true
+                    } else {
+                        hasCompletedSurvey = false
+                    }
+                }
+        }
+    }
+
+    LaunchedEffect(selectedStatus, hasCompletedSurvey, isAdmin) {
+        if (selectedStatus == "Resolved" && !isAdmin && !hasCompletedSurvey) {
+            showSurveyDialog = true
+        }
+    }
 
     var reportAverageRating by remember { mutableDoubleStateOf(0.0) }
     var reportRatingCount by remember { mutableIntStateOf(0) }
@@ -669,7 +722,32 @@ fun ReportDetailScreen(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(reporter, fontSize = smallSize, color = secondaryTextColor)
+                    if (isAnonymous || reporter == "Anonymous Student") {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (settings.contrastMode == "Dark Contrast") Color(0xFF2A2A2A) else Color(0xFFEEEEEE),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Anonymous",
+                                fontSize = (smallSize.value - 2).sp,
+                                color = if (settings.contrastMode == "Dark Contrast") Color.LightGray else Color.Gray
+                            )
+                        }
+                    }
                 }
+
+                Spacer(Modifier.height(12.dp))
+
+                ReportProgressTimeline(
+                    currentStatus = status,
+                    dateSubmitted = dateSubmitted,
+                    settings = settings
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -1027,6 +1105,7 @@ fun ReportDetailScreen(
                                             "reporter" to reporter,
                                             "targetRole" to "Student",
                                             "targetUser" to reporter,
+                                            "targetUid" to reporterUid,
                                             "type" to "report_status",
                                             "read" to false,
                                             "timestamp" to Timestamp.now(),
@@ -1038,10 +1117,11 @@ fun ReportDetailScreen(
                                         val adminNotification = hashMapOf(
                                             "reportId" to reportId,
                                             "title" to "Report Status Changed",
-                                            "message" to "A report \"$title\" is now marked as $pendingStatus.",
+                                            "message" to "A report \"$title\" by ${if (isAnonymous || reporter == "Anonymous Student") "Anonymous Student" else reporter} is now marked as $pendingStatus.",
                                             "reportTitle" to title,
                                             "status" to pendingStatus,
-                                            "reporter" to reporter,
+                                            "reporter" to (if (isAnonymous || reporter == "Anonymous Student") "Anonymous Student" else reporter),
+                                            "isAnonymous" to isAnonymous,
                                             "targetRole" to "Admin",
                                             "targetUser" to "",
                                             "type" to "report_status",
@@ -1411,6 +1491,210 @@ fun ReportDetailScreen(
             }
         }
 
+        if (showSurveyDialog) {
+            AlertDialog(
+                onDismissRequest = { showSurveyDialog = false },
+                containerColor = cardBg,
+                title = {
+                    Text(
+                        text = "🌟 Report Resolution Survey",
+                        fontSize = bodySize,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Your report '$title' is marked as Resolved! Please help us improve campus maintenance and facilities by completing this brief survey.",
+                            fontSize = smallSize,
+                            color = secondaryTextColor
+                        )
+
+                        // Question 1: Star Rating
+                        Text(
+                            text = "1. Overall Experience Rating",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            (1..5).forEach { i ->
+                                Icon(
+                                    imageVector = if (i <= userRating) Icons.Filled.Star else Icons.Outlined.Star,
+                                    contentDescription = "Star $i",
+                                    tint = if (settings.grayscaleMode) Color.DarkGray else Color(0xFFFFC107),
+                                    modifier = Modifier
+                                        .size(starSize)
+                                        .clickable { userRating = i }
+                                )
+                            }
+                        }
+
+                        // Question 2: Resolution Speed
+                        Text(
+                            text = "2. How satisfied are you with the resolution speed?",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        listOf("Very Satisfied", "Satisfied", "Neutral", "Dissatisfied").forEach { option ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { surveySpeed = option }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                RadioButton(
+                                    selected = (surveySpeed == option),
+                                    onClick = { surveySpeed = option },
+                                    colors = RadioButtonDefaults.colors(selectedColor = accentColor)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(option, fontSize = bodySize, color = textColor)
+                            }
+                        }
+
+                        // Question 3: Quality of Work
+                        Text(
+                            text = "3. Was the issue resolved to your satisfaction?",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        listOf("Yes, completely", "Partially", "No, still needs work").forEach { option ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { surveyQuality = option }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                RadioButton(
+                                    selected = (surveyQuality == option),
+                                    onClick = { surveyQuality = option },
+                                    colors = RadioButtonDefaults.colors(selectedColor = accentColor)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(option, fontSize = bodySize, color = textColor)
+                            }
+                        }
+
+                        // Question 4: Communication Clarity
+                        Text(
+                            text = "4. Administrative Communication Clarity",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        listOf("Very Clear", "Adequate", "Unclear").forEach { option ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { surveyCommunication = option }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                RadioButton(
+                                    selected = (surveyCommunication == option),
+                                    onClick = { surveyCommunication = option },
+                                    colors = RadioButtonDefaults.colors(selectedColor = accentColor)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(option, fontSize = bodySize, color = textColor)
+                            }
+                        }
+
+                        // Question 5: Suggestions
+                        Text(
+                            text = "5. Suggestions for Campus Improvement",
+                            fontSize = bodySize,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        OutlinedTextField(
+                            value = surveySuggestions,
+                            onValueChange = { surveySuggestions = it },
+                            placeholder = { Text("What suggestions do you have to improve campus maintenance/safety?", fontSize = smallSize) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp),
+                            maxLines = 3,
+                            textStyle = TextStyle(fontSize = bodySize, color = textColor)
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (myUid.isNotBlank() && reportId.isNotBlank()) {
+                                val surveyData = hashMapOf(
+                                    "reportId" to reportId,
+                                    "studentUid" to myUid,
+                                    "studentName" to if (isAnonymous) "Anonymous Student" else currentUserName,
+                                    "rating" to userRating,
+                                    "resolutionSpeed" to surveySpeed,
+                                    "qualityOfWork" to surveyQuality,
+                                    "communicationClarity" to surveyCommunication,
+                                    "suggestions" to surveySuggestions.trim(),
+                                    "timestamp" to Timestamp.now()
+                                )
+
+                                db.collection("reports")
+                                    .document(reportId)
+                                    .collection("surveys")
+                                    .document(myUid)
+                                    .set(surveyData)
+
+                                val reviewText = if (surveySuggestions.isNotBlank()) {
+                                    surveySuggestions.trim()
+                                } else {
+                                    "Quality: $surveyQuality. Speed: $surveySpeed."
+                                }
+
+                                val reviewData = hashMapOf(
+                                    "rating" to userRating,
+                                    "text" to reviewText,
+                                    "reviewerName" to if (isAnonymous) "Anonymous Student" else currentUserName,
+                                    "reviewerStudentId" to if (isAnonymous) "" else studentId,
+                                    "likes" to 0,
+                                    "dislikes" to 0,
+                                    "adminLiked" to false,
+                                    "timestamp" to Timestamp.now()
+                                )
+
+                                db.collection("reports")
+                                    .document(reportId)
+                                    .collection("reviews")
+                                    .document(reviewerKey)
+                                    .set(reviewData)
+
+                                showSurveyDialog = false
+                                hasCompletedSurvey = true
+
+                                Toast.makeText(context, "Thank you for your feedback!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                    ) {
+                        Text("Submit Survey", color = Color.White, fontSize = smallSize, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSurveyDialog = false }) {
+                        Text("Remind Me Later", color = secondaryTextColor, fontSize = smallSize)
+                    }
+                }
+            )
+        }
+
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -1578,6 +1862,109 @@ fun ReviewItem(
                         color = if (review.adminLiked) accentColor else secondaryTextColor,
                         fontWeight = FontWeight.Medium
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReportProgressTimeline(
+    currentStatus: String,
+    dateSubmitted: String,
+    settings: AccessibilitySettings
+) {
+    val steps = listOf("Submitted", "In Review", "In Progress", "Resolved")
+    val currentStep = when (currentStatus) {
+        "Resolved" -> 3
+        "In Progress" -> 2
+        "In Review" -> 1
+        else -> 0
+    }
+
+    val cardColor = if (settings.contrastMode == "Dark Contrast") Color(0xFF1E1E1E) else Color.White
+    val textColor = if (settings.contrastMode == "Dark Contrast") Color.White else Color(0xFF222222)
+    val subTextColor = if (settings.contrastMode == "Dark Contrast") Color(0xFFD0D0D0) else Color.Gray
+    val accentColor = if (settings.grayscaleMode) Color(0xFF444444) else Color(0xFFE1001B)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = "📍 Report Progress Timeline",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                steps.forEachIndexed { index, stepName ->
+                    val isCompleted = index <= currentStep
+                    val isCurrent = index == currentStep
+                    val circleColor = when {
+                        isCurrent -> accentColor
+                        isCompleted -> Color(0xFF2E7D32)
+                        else -> Color(0xFFD0D0D0)
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(circleColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isCompleted && !isCurrent) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Completed",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = "${index + 1}",
+                                    fontSize = 11.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = stepName,
+                            fontSize = 10.sp,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isCurrent) accentColor else if (isCompleted) textColor else subTextColor,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    if (index < steps.size - 1) {
+                        Box(
+                            modifier = Modifier
+                                .height(2.dp)
+                                .weight(0.5f)
+                                .background(if (index < currentStep) Color(0xFF2E7D32) else Color(0xFFE0E0E0))
+                        )
+                    }
                 }
             }
         }
