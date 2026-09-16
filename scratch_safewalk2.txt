@@ -1,0 +1,118 @@
+Republic of the Philippines
+Polytechnic University of the Philippines
+Parañaque City Campus
+SafeWalk: AI-Assisted Campus Safety Reporting &
+Incident Tracking System – PUP Parañaque
+Presented as a Course Requirement for the Completion of the
+COMP 019 Application Development and Emerging Technologies
+By:
+Atok, Marion Olivier
+Bagsic, Jessy Ross L.
+Garica, Jhian
+Galano, John Raexter T.
+Imperial, Jonerick James
+Morillo, John Aaron
+Bachelor of Science in Information Technology
+EXECUTIVE SUMMARY
+SafeWalk is a mobile-based campus safety application developed for the Polytechnic University of the Philippines, Parañaque City Campus. The system is designed to address the growing need for a structured and technology-driven approach to incident reporting and safety monitoring within the campus environment. By integrating artificial intelligence for incident categorization, real-time reporting, and location-based tracking, SafeWalk aims to reduce the response time of campus security personnel and improve overall situational awareness across the institution.
+The project was developed as a course requirement under COMP 019 – Application Development and Emerging Technologies. The system was built using Flutter as its cross-platform mobile framework and Firebase as its cloud-based backend, supporting real-time data synchronization, user authentication, and secure cloud storage. The AI-assisted categorization feature uses keyword analysis and pattern recognition to automatically classify submitted incidents into predefined categories such as theft, vandalism, medical emergencies, and fire-related incidents, among others.
+SafeWalk is intended to serve three primary user groups: students and staff who report incidents, security personnel who respond and manage reports, and administrators who oversee system activity and generate safety analytics. The system provides a seamless reporting interface, push notification alerts, and an admin dashboard that displays incident trends and campus hotspot mapping. Overall, SafeWalk represents a practical and scalable solution to campus safety challenges, with the potential to be adopted across other PUP campuses in the future.
+PART I. INTRODUCTION
+A. Organizational/Sector/Unit Profile
+The Polytechnic University of the Philippines (PUP) is one of the largest state universities in the Philippines, with its Parañaque City Campus serving as one of its key satellite campuses. Established to provide affordable and quality tertiary education, PUP Parañaque offers programs primarily in information technology, engineering, and business administration, catering to thousands of enrolled students per academic year.
+The campus operates under a centralized university governance structure, with academic affairs, student services, and campus security functions managed by respective units. Campus security is handled by a dedicated security office responsible for maintaining order, responding to incidents, and ensuring the safety of all campus constituents. Currently, the security office relies on traditional methods of incident reporting, including manual logbooks and verbal communication, which have proven insufficient in handling time-sensitive situations.
+SafeWalk was conceptualized in direct response to the needs of this campus setting. The primary stakeholders of the system include students, faculty members, administrative staff, campus security officers, and the university administration. The system targets the operational gap between incident occurrence and formal security response, aiming to bridge that gap through mobile technology and AI-assisted tools.
+B. Context and Rationale (Situation Analysis)
+Campus safety remains a persistent concern across Philippine educational institutions. At PUP Parañaque, the lack of a structured digital reporting mechanism means that incidents — ranging from minor theft and property damage to medical emergencies — are often reported through informal channels such as text messages, verbal complaints, or social media posts. This leads to delayed response times, incomplete incident records, and difficulty in identifying recurring safety concerns within specific campus locations.
+The current process is largely manual. A student or staff member who witnesses or experiences an incident must physically approach a security guard or proceed to the security office to file a report. In many cases, this step is skipped entirely due to inconvenience or fear of retaliation, resulting in underreported incidents and a skewed picture of campus safety. There is also no existing system that consolidates incident data for trend analysis or administrative review.
+These inefficiencies have a direct impact on the safety and well-being of the campus community. Without timely and accurate reporting, security personnel cannot deploy resources effectively, and administrators cannot make evidence-based decisions regarding campus security improvements. The absence of a digital trail also makes it difficult to hold accountability for recurring violations or to identify high-risk areas within the campus.
+Given these circumstances, there is a clear and pressing need for a system that empowers campus members to report incidents quickly and easily from their mobile devices, while simultaneously equipping security personnel and administrators with the tools they need to respond and analyze safety data. SafeWalk addresses these needs through a mobile-first, AI-integrated approach that makes reporting more accessible, documentation more reliable, and response more efficient.
+C. Workplace Development Objectives
+The general objective of SafeWalk is to develop a mobile-based AI-assisted incident reporting and tracking system that improves campus safety response at PUP Parañaque City Campus. Specifically, the project aims to:
+Provide a fast and accessible mobile platform that allows students, faculty, and staff to submit incident reports in under two minutes, reducing the current dependency on manual and verbal reporting methods.
+Implement an AI-based incident categorization module that automatically classifies submitted reports into predefined safety categories, reducing manual sorting time for security personnel by at least 60%.
+Enable real-time push notifications to alert security officers of newly submitted incidents, ensuring that response action is initiated within five minutes of a report submission.
+Establish a centralized incident database through Firebase Firestore that stores all reported incidents with timestamps, location data, and categorization tags, supporting historical analysis and pattern recognition.
+Generate analytics and hotspot maps accessible to the administration, enabling data-driven decisions regarding campus security resource allocation.
+Ensure data privacy compliance in accordance with the Republic Act 10173 or the Data Privacy Act of 2012, safeguarding the personal information of all users involved in the reporting process.
+D. Expected Output and Outcomes
+The primary output of this project is the SafeWalk mobile application, a fully functional prototype developed using Flutter that runs on both Android and iOS platforms. The application includes a reporter interface for submitting incidents, a responder interface for security personnel, and an admin dashboard for monitoring and analytics. Supporting outputs include a Firebase Firestore database with structured collections for users, incidents, and notifications; a technical documentation report; and a basic user manual for onboarding campus users.
+In terms of outcomes, the successful deployment of SafeWalk is expected to yield measurable improvements in campus safety operations. Incident reporting is projected to become significantly faster and more consistent, with digital records replacing informal and undocumented verbal reports. The AI categorization feature is expected to reduce the administrative workload of security personnel, allowing them to focus on response rather than documentation. Over time, the accumulation of incident data will enable the university administration to identify unsafe zones, allocate security resources more strategically, and implement preventive measures based on trends. Ultimately, SafeWalk is intended to foster a safer and more responsive campus environment for all members of the PUP Parañaque community.
+PART II. SYSTEM ANALYSIS
+A. Functional Requirements Analysis
+SafeWalk is built around three distinct user roles: Reporter (students and staff), Responder (security personnel), and Administrator. Each role has a defined set of functions and system access levels that reflect their responsibilities within the campus safety workflow.
+System Features and Functions:
+User Registration and Authentication — Users register using their institutional email address. Firebase Authentication handles login and session management, with role-based access control assigning appropriate permissions upon verification.
+Incident Reporting Module — Reporters can submit an incident by filling out a structured form that includes the type of incident, a brief description, the date and time, and their current GPS location. Photo attachments are optional but supported through Firebase Cloud Storage.
+AI-Based Incident Categorization — Upon submission, the system processes the incident description using a keyword-matching and classification algorithm to automatically assign it to one of the predefined categories: Theft, Vandalism, Medical Emergency, Fire, Harassment, or Other. This reduces manual triage work on the security side.
+Real-Time Notification System — Once an incident is submitted and categorized, Firebase Cloud Messaging sends an immediate push notification to all active Responder accounts, including the incident summary and location.
+Incident Status Tracking — Reporters can view the current status of their submitted reports (Pending, Under Review, Resolved) through the app's report history section.
+Admin Dashboard — Administrators have access to a web-based dashboard that displays all submitted incidents, their status, category distribution, and a campus map with incident hotspots plotted using coordinate data.
+Incident Log and Search — All incidents are stored in Firestore with full metadata. Administrators and responders can filter and search records by date range, category, location, and status.
+Use Case Descriptions:
+Use Case
+UC-01: Submit Incident Report
+Actor
+Reporter (Student/Staff)
+Precondition
+User is logged in and has network access.
+Main Flow
+Reporter opens the app, selects 'Report Incident', fills in the incident form (type, description, location, photo), and submits. The system validates input, runs AI categorization, stores the report, and sends a notification to security.
+Postcondition
+Incident is saved to Firestore and visible to Responders and Admins.
+Use Case
+UC-02: Respond to Incident
+Actor
+Responder (Security Personnel)
+Precondition
+Responder is logged in and receives a push notification.
+Main Flow
+Responder views the incoming incident details including location, category, and description. Responder updates the incident status to 'Under Review' upon taking action and 'Resolved' upon completion, with optional remarks.
+Postcondition
+Incident status is updated in real-time across all user views.
+Use Case
+UC-03: View Incident Analytics
+Actor
+Administrator
+Precondition
+Admin is logged into the dashboard.
+Main Flow
+Admin navigates to the analytics section, selects a date range and filters by category or location. The system generates a summary report and renders a map overlay of incident coordinates.
+Postcondition
+Admin can export or review trend data to support safety planning decisions.
+B. System Architecture
+SafeWalk follows a cloud-based, three-tier architecture comprising the presentation layer (frontend), business logic layer (application logic), and data layer (backend/database). The system is designed to be lightweight and scalable, taking advantage of Firebase's serverless infrastructure to minimize operational overhead.
+Frontend (Presentation Layer): The mobile application is developed using Flutter, Google's open-source UI toolkit for building natively compiled applications for Android and iOS from a single codebase. The app uses Dart as its programming language and follows a Material Design-inspired interface for familiarity and ease of use. The admin dashboard is built as a Flutter Web module, accessible via browser.
+Application Logic Layer: Business logic is handled client-side through Flutter's provider-based state management, with Firebase serving as the backend processing layer. The AI categorization module runs within the Flutter application using a pre-trained keyword classification model that maps incident keywords to categories. For future scalability, this logic can be migrated to Firebase Cloud Functions to support more complex NLP-based categorization.
+Data Layer (Backend): Firebase Firestore serves as the primary NoSQL database, storing incident documents in a structured collection-based format. Firebase Authentication manages user identity, while Firebase Cloud Messaging handles push notifications. Firebase Cloud Storage is used for image uploads attached to incident reports. All communication between the app and Firebase services occurs over HTTPS with TLS encryption.
+C. Hosting and Deployment
+SafeWalk relies entirely on Google Firebase as its cloud hosting and backend service platform. Firebase is chosen for its real-time capabilities, scalability, generous free-tier allowances, and tight integration with Flutter, making it the most practical choice for an academic-stage prototype targeting a campus-scale deployment.
+The deployment pipeline is structured into three environments. During the development phase, the team works in a local Flutter development environment connected to a Firebase development project with test data. Upon feature completion, the application is moved to a staging environment for integration testing, where test users from the group validate core workflows including report submission, notification delivery, and status updates. The production release is packaged as an APK for Android distribution and, if resources allow, submitted to the Google Play Store for formal deployment.
+The admin dashboard is deployed via Firebase Hosting, which provides a globally distributed CDN-backed web host with automatic SSL certificate provisioning. This ensures the dashboard is accessible from any browser with minimal latency. Firebase's infrastructure guarantees 99.95% uptime under its standard SLA, making it reliable enough for campus-scale operations without requiring dedicated server management from the development team.
+D. Security Measures
+Security is a core design consideration in SafeWalk, particularly given that the system handles personally identifiable information (PII) of students and staff, as well as sensitive incident data. The following measures are implemented to protect system integrity and user data:
+Authentication and Authorization: Firebase Authentication is used to verify user identity through email-and-password login. Role-based access control (RBAC) is enforced through Firestore Security Rules, which restrict read/write access based on the user's assigned role stored in the users collection. For example, only users with the 'admin' role can access the analytics endpoint, while only authenticated reporters can submit new incident documents.
+Data Encryption: All data transmitted between the SafeWalk mobile application and Firebase services is encrypted using TLS (Transport Layer Security). Firestore stores data at rest with AES-256 encryption, which is managed automatically by Google Cloud infrastructure.
+Input Validation and Sanitization: All user inputs in the incident report form are validated client-side before submission to prevent malformed data from entering the database. Fields such as descriptions are character-limited, and file uploads are restricted to JPEG and PNG formats with a maximum size of 5MB.
+Data Privacy Compliance: The system is designed with awareness of Republic Act 10173 (Data Privacy Act of 2012). User data is collected only for the purpose of incident reporting and response. Reporter identities are visible only to security personnel and administrators and are not publicly displayed. Users are informed of data collection practices at registration through an in-app consent notice.
+Potential Threats and Mitigations: Unauthorized access is mitigated through token-based session management and automatic session expiration. The system does not expose any raw database endpoints, as all interactions go through Firebase's secure SDK. In the event of a data breach, Firebase's audit logging provides a traceable record of data access activities.
+E. Scalability and Maintainability
+SafeWalk is architected with future growth in mind. In its current prototype stage, the system is designed to handle the reporting volume of a single PUP campus. However, the underlying Firebase infrastructure supports horizontal scaling by default — Firestore automatically scales to handle increased read/write loads without requiring manual configuration. If the system were to be expanded campus-wide or adopted across multiple PUP branches, the same codebase and Firebase project could accommodate this growth by upgrading the Firebase plan and partitioning data by campus using Firestore subcollections.
+The Flutter codebase follows a feature-based folder structure, separating screens, data models, services, and providers into distinct modules. This makes it straightforward to add new features — such as an SOS emergency button, a live campus map overlay, or an escalation workflow — without disrupting existing functionality. The use of the Provider state management pattern ensures that UI logic and business logic remain decoupled, making the codebase easier to test and maintain.
+Code documentation is maintained through in-line comments and a separate technical specification document. Every Firebase collection structure is documented with field descriptions and data types to ensure that future developers or maintainers can understand the database schema without needing to reverse-engineer existing queries. The team also maintains a GitHub repository with version-controlled commits and a clear branching strategy, separating development, staging, and main branches for organized release management.
+PART III. REFLECTIONS AND LESSONS LEARNED
+Developing SafeWalk was a valuable hands-on experience that pushed the team to apply concepts from software development, system design, and emerging technologies in a real-world campus context. The project was not without its challenges, and the process of working through those challenges yielded some of the most important takeaways from this course.
+One of the earliest and most significant lessons was the importance of clearly defining user roles and workflows before writing a single line of code. In the initial planning stages, the team had a vague idea of what the app should do but had not mapped out the specific screens, data fields, and access restrictions for each user type. This led to some rework in the early development phase when it became clear that the reporter, responder, and admin interfaces needed to be distinctly different — not just visually, but also in terms of what data they could access. From that point forward, the team adopted a use-case-first approach, drafting each use case before building its corresponding feature.
+The integration of Firebase was generally smooth, but working with Firestore Security Rules proved more complex than expected. Writing rules that correctly enforced role-based access without accidentally blocking legitimate operations required careful testing and iteration. This experience gave the team a much deeper appreciation for backend security as a discipline that requires deliberate attention, rather than an afterthought bolted on at the end of development.
+The AI categorization feature, while relatively lightweight in its current implementation, opened the team's eyes to the broader potential of machine learning integration in practical applications. Working with keyword-based classification made it clear how even a simple form of automated intelligence can reduce manual workload and improve system responsiveness. The team recognizes that the current approach has limitations — particularly with nuanced or ambiguous incident descriptions — and sees NLP-based classification as a natural next step for future development.
+Working as a team of six also taught the group the value of clear task delegation and consistent communication. At times, parallel development tracks would produce conflicting implementations that needed to be reconciled. This reinforced the importance of using version control tools like Git not just for backup, but as an active collaboration mechanism. By the end of the project, the team had a much more disciplined approach to branching and merging code.
+Overall, SafeWalk represents more than just a course requirement — it is a proof of concept that emerging technologies can meaningfully address everyday institutional challenges. The team leaves this project with a stronger technical foundation, a clearer understanding of the software development lifecycle, and a genuine sense of pride in having built something with real-world applicability for their own campus.
+REFERENCES
+Google LLC. (2023). Firebase documentation: Cloud Firestore. https://firebase.google.com/docs/firestore
+Google LLC. (2023). Firebase documentation: Firebase Authentication. https://firebase.google.com/docs/auth
+Google LLC. (2023). Firebase documentation: Firebase Cloud Messaging. https://firebase.google.com/docs/cloud-messaging
+Flutter Team. (2023). Flutter documentation: Get started. https://docs.flutter.dev/get-started/install
+Republic of the Philippines. (2012). Republic Act No. 10173: Data Privacy Act of 2012. Official Gazette. https://www.officialgazette.gov.ph/2012/08/15/republic-act-no-10173/
+National Privacy Commission. (2021). Guidelines on data privacy in educational institutions. https://www.privacy.gov.ph
+Pressman, R. S., & Maxim, B. R. (2019). Software engineering: A practitioner's approach (9th ed.). McGraw-Hill Education.
+Sommerville, I. (2016). Software engineering (10th ed.). Pearson Education.

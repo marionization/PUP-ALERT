@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PUP ALERT (Chrome Web - Device Preview)",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/pup_alert/lib/main.dart",
+      "cwd": "${workspaceFolder}/pup_alert",
+      "deviceId": "chrome"
+    },
+    {
+      "name": "PUP ALERT (Edge Web - Device Preview)",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/pup_alert/lib/main.dart",
+      "cwd": "${workspaceFolder}/pup_alert",
+      "deviceId": "edge"
+    },
+    {
+      "name": "PUP ALERT (Default / Auto-Select Device)",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/pup_alert/lib/main.dart",
+      "cwd": "${workspaceFolder}/pup_alert"
+    }
+  ]
+}
