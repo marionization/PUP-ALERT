@@ -1,0 +1,114 @@
+centertop
+Republic of the PhilippinesPolytechnic University of the PhilippinesParanaque City Campus
+SafeWalk: AI-Assisted Campus Safety Reporting & Incident Tracking System – PUP Parañaque
+Presented as a Course Requirement for the Completion of the COMP 019 Application Development and Emerging Technologies
+By:
+Atok, Marion Olivier
+Bagsic, Jessy Ross L.
+Garica, Jhian
+Galano, John Raexter T.
+Imperial, Jonerick James
+Morillo, John Aaron
+Bachelor of Science in Information Technology
+EXECUTIVE SUMMARY
+TABLE OF CONTENTS
+Title Page739457144587739457144587
+i
+Executive Summary13515971401421351597140142
+ii
+Table of Contents12118971369671211897136967
+iii
+Part I. INTRODUCTION
+1
+A. Organizational/Sector/Unit Profile
+B. Context and Rationale (Situation Analysis)
+C. Workplace Development Objectives
+D. Expected Output and Outcomes
+Part II. SYSTEM ANALYSIS
+A. Functional Requirements Analysis
+B. System Architecture
+C. Hosting and Deployment
+D. Security Measure
+E. Scalability and Maintainability
+Part III. REFLECTIONS AND LESSONS LEARNED
+References823277139507823277139507
+Appendices – Codes
+INTRODUCTION
+Organizational/Sector/Unit Profile
+Task: Research and document the background of the chosen organization.
+Identify the organization’s name, industry, and core purpose
+List key programs, services, or products offered
+Identify target users/customers or stakeholders
+Explain how the organization currently operates (basic workflow)
+Context and Rationale (Situation Analysis)
+Task: Analyze the current situation and justify the need for your proposed system.
+Identify existing processes (manual or system-based)
+Highlight problems, inefficiencies, or gaps (e.g., delays, errors, lack of automation)
+Provide evidence (observations, sample scenarios, or data if available)
+Explain why these issues matter (impact on users/business)
+Justify why developing a system or using emerging technologies is necessary
+Workplace Development Objectives
+Task: Define what your system aims to achieve.
+State general goal (e.g., improve efficiency, automate tasks)
+Break down into specific objectives, such as:
+Reduce processing time
+Improve data accuracy
+Enhance user experience
+Strengthen security
+Ensure objectives are clear and measurable (SMART if possible)
+Expected Output and Outcomes
+Task: Describe what the project will produce and its impact.
+Outputs (Tangible Deliverables):
+Developed system/application
+Database
+User interface
+Documentation (user manual, technical report)
+Outcomes (Results/Benefits):
+Faster transactions
+Reduced errors
+Better decision-making
+Improved customer/user satisfaction
+SYSTEM ANALYSIS
+Functional Requirements Analysis
+Task: Identify and define what the system should do.
+List all system features and functions
+Identify user roles (e.g., admin, staff, customer)
+Define user actions (e.g., login, create record, update data)
+Create:
+Use Case Descriptions
+Functional requirement list (input → process → output)
+Ensure requirements are clear, complete, and testable
+System Architecture
+Task: Design the structure of the system.
+Identify architecture type (e.g., client-server, 3-tier, cloud-based)
+Define components:
+Frontend (UI)
+Backend (logic)
+Database
+Show how components interact (diagram if required)
+Hosting and Deployment
+Task: Plan where and how the system will run.
+Choose hosting type:
+Local server / Cloud (e.g., AWS, Azure)
+Define deployment process:
+Development → Testing → Production
+Identify tools/platforms used for deployment
+Consider availability and uptime
+Security Measures
+Task: Ensure system protection and data safety.
+Identify potential threats (e.g., unauthorized access, data breaches)
+Define security features:
+Authentication (login system)
+Authorization (user roles/permissions)
+Data encryption
+Backup and recovery
+Align with basic security principles (CIA Triad if needed)
+Scalability and Maintainability
+Task: Ensure the system can grow and be easily updated.
+Scalability:
+Can handle more users/data in the future
+Use modular or cloud-based solutions
+Maintainability:
+Clean and organized code structure
+Proper documentation
+Easy to update or fix bugs

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "729864961364",
+    "project_id": "pup-alert-b9ece",
+    "storage_bucket": "pup-alert-b9ece.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:729864961364:android:58c4c3260f39a3ffcf5cc1",
+        "android_client_info": {
+          "package_name": "com.example.seriousmode"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGv5ftNKDMc99cvI_z5s_be_A8bCnroUo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
