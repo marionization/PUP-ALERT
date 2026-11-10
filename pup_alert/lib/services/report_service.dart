@@ -155,9 +155,36 @@ class ReportService {
     return docRef.id;
   }
 
-  // Update report status (Admin feature)
+  // Update report status (Admin feature) and notify the report's student owner
   Future<void> updateReportStatus(String reportId, String newStatus) async {
-    await _reportsRef.doc(reportId).update({'status': newStatus});
+    final docRef = _reportsRef.doc(reportId);
+    final snap = await docRef.get();
+    await docRef.update({'status': newStatus});
+
+    if (snap.exists) {
+      final data = snap.data() as Map<String, dynamic>?;
+      final reporterUid = data?['reporterUid']?.toString() ?? '';
+      final reporterName = data?['reporter']?.toString() ?? '';
+      final reportTitle = data?['title']?.toString() ?? 'Incident Report';
+      if (reporterUid.isNotEmpty) {
+        try {
+          await _firestore.collection('notifications').add({
+            'reportId': reportId,
+            'title': 'Report Status Updated',
+            'message':
+                'Your report "$reportTitle" status is now "$newStatus".',
+            'reportTitle': reportTitle,
+            'status': newStatus,
+            'targetRole': 'Student',
+            'targetUser': reporterName,
+            'targetUid': reporterUid,
+            'type': 'status_update',
+            'read': false,
+            'timestamp': Timestamp.now(),
+          });
+        } catch (_) {}
+      }
+    }
   }
 
   // Add review and update average rating

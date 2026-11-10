@@ -1,4 +1,8 @@
+import 'dart:math';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/auth_service.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -13,6 +17,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const List<String> _backgroundImages = [
+    'assets/images/login_bg_1.jpg',
+    'assets/images/login_bg_2.jpg',
+  ];
+
   final _authService = AuthService();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -20,6 +29,34 @@ class _LoginScreenState extends State<LoginScreen> {
   String _selectedRole = 'Student'; // "Student" or "Administrator"
   bool _isLoading = false;
   bool _obscurePassword = true;
+  late String _selectedBgImage;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedBgImage =
+        _backgroundImages[Random().nextInt(_backgroundImages.length)];
+    _shuffleBackgroundOnLoad();
+  }
+
+  Future<void> _shuffleBackgroundOnLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastIndex = prefs.getInt('last_login_bg_index');
+    int nextIndex;
+    if (lastIndex != null && _backgroundImages.length > 1) {
+      // Pick a different image from the previous login/refresh
+      nextIndex = (lastIndex + 1 + Random().nextInt(_backgroundImages.length - 1)) %
+          _backgroundImages.length;
+    } else {
+      nextIndex = Random().nextInt(_backgroundImages.length);
+    }
+    await prefs.setInt('last_login_bg_index', nextIndex);
+    if (mounted) {
+      setState(() {
+        _selectedBgImage = _backgroundImages[nextIndex];
+      });
+    }
+  }
 
   Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
@@ -76,6 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Check if 2FA OTP is required for Student
       if (result['requiresOtp'] == true) {
+        final resolver = result['resolver'] as MultiFactorResolver?;
+        final phoneHint = result['phoneHint'] as PhoneMultiFactorInfo?;
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -86,6 +126,9 @@ class _LoginScreenState extends State<LoginScreen> {
               firstName: firstName,
               studentId: studentId,
               uid: uid,
+              phoneNumber: phone,
+              mfaResolver: resolver,
+              mfaPhoneInfo: phoneHint,
             ),
           ),
         );
@@ -100,6 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
             userRole: role,
             userName: userName,
             firstName: firstName,
+            studentId: studentId,
           ),
         ),
       );
@@ -127,60 +171,102 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // School Logo
-                Image.asset(
-                  'assets/images/ic_school_logo.png',
-                  height: 88,
-                  width: 88,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 88,
-                    height: 88,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFFC62828),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Shuffled PUP Campus Background Image
+          Image.asset(
+            _selectedBgImage,
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            errorBuilder: (context, error, stackTrace) =>
+                Container(color: const Color(0xFFF5F5F7)),
+          ),
+          // Dark tint overlay for contrast and readability
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.60),
+                ],
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // School Logo
+                    Image.asset(
+                      'assets/images/ic_school_logo.png',
+                      height: 88,
+                      width: 88,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 88,
+                        height: 88,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFC62828),
+                        ),
+                        child: const Icon(
+                          Icons.school,
+                          size: 52,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.school,
-                      size: 52,
-                      color: Colors.white,
+                    const SizedBox(height: 8),
+
+                    // Campus Header
+                    const Text(
+                      'PUP Parañaque Campus',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Report and Monitoring System',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 6,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Campus Header
-                const Text(
-                  'PUP Parañaque Campus',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFC62828),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Report and Monitoring System',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Color(0xFF616161)),
-                ),
-                const SizedBox(height: 16),
-
-                // Login Card
-                Card(
-                  elevation: 6,
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                    // Login Card
+                    Card(
+                      elevation: 10,
+                      color: Colors.white.withValues(alpha: 0.96),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
@@ -442,10 +528,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

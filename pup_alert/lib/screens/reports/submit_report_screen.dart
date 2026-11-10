@@ -74,28 +74,32 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     final session = await _authService.getCurrentSession();
     final prefs = await SharedPreferences.getInstance();
     final user = _authService.currentUser;
+    if (!mounted) return;
     setState(() {
       _reporterName =
           session['name'] ?? (prefs.getString('user_name') ?? 'Student');
       _reporterStudentId =
           session['studentId'] ?? (prefs.getString('student_id') ?? '');
       _reporterUid =
-          user?.uid ??
-          (session['uid'] ?? (prefs.getString('user_uid') ?? 'student_uid'));
+          user?.uid ?? (session['uid'] ?? (prefs.getString('user_uid') ?? ''));
     });
+    await _restoreDraft();
   }
 
-  // Feature 3: Restore Draft
+  // Feature 3: Restore Draft (scoped per student UID)
   Future<void> _restoreDraft() async {
+    final uid = _authService.currentUser?.uid ?? _reporterUid;
+    if (uid.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final draftTitle = prefs.getString('draft_title') ?? '';
-    final draftCategory = prefs.getString('draft_category') ?? '';
-    final draftLocation = prefs.getString('draft_location') ?? '';
-    final draftDescription = prefs.getString('draft_description') ?? '';
+    final draftTitle = prefs.getString('draft_title_$uid') ?? '';
+    final draftCategory = prefs.getString('draft_category_$uid') ?? '';
+    final draftLocation = prefs.getString('draft_location_$uid') ?? '';
+    final draftDescription = prefs.getString('draft_description_$uid') ?? '';
 
     if (draftTitle.isNotEmpty ||
         draftLocation.isNotEmpty ||
         draftDescription.isNotEmpty) {
+      if (!mounted) return;
       setState(() {
         if (draftTitle.isNotEmpty) _titleController.text = draftTitle;
         if (draftCategory.isNotEmpty && _categories.contains(draftCategory)) {
@@ -110,12 +114,17 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
   }
 
   Future<void> _saveDraft() async {
+    final uid = _authService.currentUser?.uid ?? _reporterUid;
+    if (uid.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('draft_title', _titleController.text.trim());
-    await prefs.setString('draft_category', _selectedCategory);
-    await prefs.setString('draft_location', _locationController.text.trim());
+    await prefs.setString('draft_title_$uid', _titleController.text.trim());
+    await prefs.setString('draft_category_$uid', _selectedCategory);
     await prefs.setString(
-      'draft_description',
+      'draft_location_$uid',
+      _locationController.text.trim(),
+    );
+    await prefs.setString(
+      'draft_description_$uid',
       _descriptionController.text.trim(),
     );
 
@@ -125,11 +134,14 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
   }
 
   Future<void> _clearDraft() async {
+    final uid = _authService.currentUser?.uid ?? _reporterUid;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('draft_title');
-    await prefs.remove('draft_category');
-    await prefs.remove('draft_location');
-    await prefs.remove('draft_description');
+    if (uid.isNotEmpty) {
+      await prefs.remove('draft_title_$uid');
+      await prefs.remove('draft_category_$uid');
+      await prefs.remove('draft_location_$uid');
+      await prefs.remove('draft_description_$uid');
+    }
 
     setState(() {
       _titleController.clear();
@@ -160,18 +172,21 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     }
   }
 
-  // Feature 4: Live Duplicate Incident Detection matching Kotlin LaunchedEffect
+  // Feature 4: Live Duplicate Incident Detection (scoped to current student's reports)
   Future<void> _checkDuplicateReport() async {
     final locQuery = _locationController.text.trim().toLowerCase();
     final titleQuery = _titleController.text.trim().toLowerCase();
+    final currentUid = _authService.currentUser?.uid ?? _reporterUid;
 
-    if (locQuery.length >= 3 || titleQuery.length >= 4) {
+    if (currentUid.isNotEmpty &&
+        (locQuery.length >= 3 || titleQuery.length >= 4)) {
       try {
         final snapshot = await _firestore.collection('reports').get();
         Report? match;
 
         for (final doc in snapshot.docs) {
           final data = doc.data();
+          if (data['reporterUid']?.toString() != currentUid) continue;
           final docStatus = data['status']?.toString() ?? 'In Review';
           if (docStatus == 'Resolved') continue;
 
@@ -278,6 +293,16 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final session = await _authService.getCurrentSession();
+      final effectiveUid = _authService.currentUser?.uid ??
+          (_reporterUid.isNotEmpty ? _reporterUid : (session['uid'] ?? ''));
+      final effectiveName = _reporterName != 'Student'
+          ? _reporterName
+          : (session['name'] ?? _reporterName);
+      final effectiveStudentId = _reporterStudentId.isNotEmpty
+          ? _reporterStudentId
+          : (session['studentId'] ?? '');
+
       await _reportService.submitReport(
         title: title,
         category: _selectedCategory,
@@ -285,9 +310,9 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
         description: description,
         mediaFile: _selectedMedia,
         isAnonymous: _isAnonymous,
-        reporterName: _reporterName,
-        reporterUid: _reporterUid,
-        reporterStudentId: _reporterStudentId,
+        reporterName: effectiveName,
+        reporterUid: effectiveUid,
+        reporterStudentId: effectiveStudentId,
       );
 
       // Clear draft on successful submission

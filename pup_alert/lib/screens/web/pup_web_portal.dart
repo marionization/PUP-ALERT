@@ -110,7 +110,7 @@ class _PupWebPortalState extends State<PupWebPortal> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'PUPALERT Accessibility Tool',
+                                'PUP-ALERT Accessibility Tool',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -417,9 +417,9 @@ class _PupWebPortalState extends State<PupWebPortal> {
           ),
           const SizedBox(width: 10),
 
-          // PUPALERT Brand Text
+          // PUP-ALERT Brand Text
           Text(
-            'PUPALERT',
+            'PUP-ALERT',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -479,13 +479,16 @@ class _PupWebPortalState extends State<PupWebPortal> {
                   final read = d['read'] ?? false;
                   final role = d['targetRole']?.toString().toLowerCase() ?? '';
                   if (!read) {
-                    if (isAdmin && (role == 'admin' || role == 'administrator'))
+                    if (isAdmin &&
+                        (role == 'admin' || role == 'administrator')) {
                       unread++;
+                    }
                     if (!isAdmin &&
-                        (d['targetUser'] == widget.userName ||
-                            (currentUid.isNotEmpty &&
-                                d['targetUid'] == currentUid)))
+                        role == 'student' &&
+                        currentUid.isNotEmpty &&
+                        d['targetUid'] == currentUid) {
                       unread++;
+                    }
                   }
                 }
               }
@@ -801,44 +804,34 @@ class _PupWebPortalState extends State<PupWebPortal> {
     );
   }
 
+  bool _isMyReport(Report r, String currentUid) {
+    if (currentUid.isEmpty) return false;
+    return r.reporterUid == currentUid;
+  }
+
   // --- Executive Campus Safety Dashboard (Home Tab) ---
   Widget _buildHomeDashboard(
     bool isAdmin,
     String currentUid,
     List<Report> allReports,
   ) {
-    final totalCount = allReports.length;
-    final inReviewCount = allReports
+    final userReports = !isAdmin
+        ? allReports.where((r) => _isMyReport(r, currentUid)).toList()
+        : allReports;
+
+    final scopedReports = isAdmin ? allReports : userReports;
+    final totalCount = scopedReports.length;
+    final inReviewCount = scopedReports
         .where((r) => r.status == 'In Review')
         .length;
-    final inProgressCount = allReports
+    final inProgressCount = scopedReports
         .where((r) => r.status == 'In Progress')
         .length;
-    final resolvedCount = allReports
+    final resolvedCount = scopedReports
         .where((r) => r.status == 'Resolved')
         .length;
 
-    final userReports = !isAdmin
-        ? allReports.where((r) {
-            if (currentUid.isNotEmpty && r.reporterUid == currentUid) {
-              return true;
-            }
-            if (widget.studentId.isNotEmpty &&
-                r.reporterStudentId.isNotEmpty &&
-                r.reporterStudentId == widget.studentId) {
-              return true;
-            }
-            if (!r.isAnonymous &&
-                (r.reporter == widget.userName ||
-                    r.reporter == widget.firstName)) {
-              return true;
-            }
-            if (r.reporter == widget.userName) return true;
-            return false;
-          }).toList()
-        : allReports;
-
-    final sortedRecent = List<Report>.from(allReports)
+    final sortedRecent = List<Report>.from(scopedReports)
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final recentReports = sortedRecent.take(4).toList();
 
@@ -868,7 +861,7 @@ class _PupWebPortalState extends State<PupWebPortal> {
               flex: 3,
               child: Column(
                 children: [
-                  _buildCategoryBreakdownCard(allReports, totalCount),
+                  _buildCategoryBreakdownCard(scopedReports, totalCount),
                   const SizedBox(height: 20),
                   _buildRecentIncidentsCard(recentReports, isAdmin),
                 ],
@@ -1046,9 +1039,9 @@ class _PupWebPortalState extends State<PupWebPortal> {
       children: [
         Expanded(
           child: _buildKpiCard(
-            title: 'Total Incidents',
+            title: isAdmin ? 'Total Incidents' : 'My Reports',
             value: '$totalCount',
-            subtitle: isAdmin ? 'Campus-wide submitted' : 'Total recorded',
+            subtitle: isAdmin ? 'Campus-wide submitted' : 'Submitted by you',
             icon: Icons.assignment_outlined,
             color: widget.settings.accentColor,
           ),
@@ -1299,7 +1292,9 @@ class _PupWebPortalState extends State<PupWebPortal> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Recent Campus Incident Activity',
+                    isAdmin
+                        ? 'Recent Campus Incident Activity'
+                        : 'My Recent Incident Reports',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: widget.settings.titleFontWeight,
@@ -1812,28 +1807,7 @@ class _PupWebPortalState extends State<PupWebPortal> {
   ) {
     // Student sees their own reports on My Reports, Admin sees all reports
     final visibleReports = !isAdmin
-        ? allReports.where((r) {
-            if (currentUid.isNotEmpty && r.reporterUid == currentUid) {
-              return true;
-            }
-            if (widget.studentId.isNotEmpty &&
-                r.reporterStudentId.isNotEmpty &&
-                r.reporterStudentId == widget.studentId) {
-              return true;
-            }
-            if (!r.isAnonymous &&
-                (r.reporter == widget.userName ||
-                    r.reporter == widget.firstName)) {
-              return true;
-            }
-            if (r.reporter == widget.userName) return true;
-            if (r.reporterUid.isNotEmpty &&
-                (r.reporterUid == currentUid ||
-                    r.reporterUid == widget.studentId)) {
-              return true;
-            }
-            return false;
-          }).toList()
+        ? allReports.where((r) => _isMyReport(r, currentUid)).toList()
         : allReports;
 
     final inboxCount = visibleReports.length;
@@ -2535,7 +2509,19 @@ class _PupWebPortalState extends State<PupWebPortal> {
                             color: widget.settings.accentColor,
                           ),
                         );
-                      final docs = snapshot.data!.docs;
+                      final currentUid = _authService.currentUser?.uid ?? '';
+                      final docs = snapshot.data!.docs.where((doc) {
+                        final d = doc.data() as Map<String, dynamic>;
+                        final role =
+                            d['targetRole']?.toString().toLowerCase() ?? '';
+                        if (isAdmin) {
+                          return role == 'admin' || role == 'administrator';
+                        } else {
+                          return role == 'student' &&
+                              currentUid.isNotEmpty &&
+                              d['targetUid'] == currentUid;
+                        }
+                      }).toList();
                       if (docs.isEmpty)
                         return Center(
                           child: Text(

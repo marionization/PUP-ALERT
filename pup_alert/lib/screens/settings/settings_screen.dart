@@ -387,7 +387,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                     activeThumbColor: titleColor,
                     title: Text(
-                      'Two-Factor Authentication (2FA)',
+                      'SMS Two-Factor Authentication (2FA)',
                       style: TextStyle(
                         fontSize: titleSize,
                         fontWeight: settings.mediumFontWeight,
@@ -395,7 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     subtitle: Text(
-                      'Require a 6-digit OTP verification code when signing in as student.',
+                      'Receive a real 6-digit SMS verification code to your phone on student sign-in.',
                       style: TextStyle(
                         fontSize: bodySize - 1,
                         color: secondaryTextColor,

@@ -7,6 +7,7 @@ import 'package:device_preview/device_preview.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
+import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -21,13 +22,27 @@ void main() async {
     debugPrint('Firebase initialization notice: $e');
   }
 
-  // Check saved session
+  // Check saved session and verify against active Firebase Auth user
   final prefs = await SharedPreferences.getInstance();
-  final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-  final role = prefs.getString('role') ?? 'student';
-  final name = prefs.getString('user_name') ?? 'Student';
-  final firstName =
+  final authService = AuthService();
+  bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  String role = prefs.getString('role') ?? 'student';
+  String name = prefs.getString('user_name') ?? 'Student';
+  String firstName =
       prefs.getString('student_first_name') ?? (name.split(' ').first);
+  String studentId = prefs.getString('student_id') ?? '';
+
+  if (isLoggedIn && role != 'admin') {
+    if (authService.currentUser == null) {
+      isLoggedIn = false;
+      await prefs.setBool('is_logged_in', false);
+    } else {
+      final session = await authService.getCurrentSession();
+      name = session['name'] ?? name;
+      firstName = session['firstName'] ?? firstName;
+      studentId = session['studentId'] ?? studentId;
+    }
+  }
 
   runApp(
     DevicePreview(
@@ -37,6 +52,7 @@ void main() async {
         role: role,
         name: name,
         firstName: firstName,
+        studentId: studentId,
       ),
     ),
   );
@@ -47,6 +63,7 @@ class PupAlertApp extends StatelessWidget {
   final String role;
   final String name;
   final String firstName;
+  final String studentId;
 
   const PupAlertApp({
     super.key,
@@ -54,12 +71,13 @@ class PupAlertApp extends StatelessWidget {
     required this.role,
     required this.name,
     required this.firstName,
+    this.studentId = '',
   });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PUP ALERT',
+      title: 'PUP-ALERT',
       debugShowCheckedModeBanner: false,
       locale: DevicePreview.locale(context),
       builder: DevicePreview.appBuilder,
@@ -71,6 +89,7 @@ class PupAlertApp extends StatelessWidget {
               userRole: role,
               userName: name,
               firstName: firstName,
+              studentId: studentId,
             )
           : const LoginScreen(),
     );

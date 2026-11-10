@@ -33,12 +33,14 @@ class DashboardScreen extends StatefulWidget {
   final String userRole; // 'student' or 'admin'
   final String userName;
   final String firstName;
+  final String studentId;
 
   const DashboardScreen({
     super.key,
     required this.userRole,
     required this.userName,
     this.firstName = '',
+    this.studentId = '',
   });
 
   @override
@@ -57,6 +59,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       0; // 0: All, 1: In Review, 2: In Progress, 3: Resolved
   String _selectedCategory = 'All Categories';
 
+  String _userName = '';
   String _studentId = '';
   String _firstName = '';
   AccessibilitySettings _settings = const AccessibilitySettings();
@@ -75,6 +78,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _userName = widget.userName;
+    _studentId = widget.studentId;
+    _firstName = widget.firstName.isNotEmpty
+        ? widget.firstName
+        : widget.userName.split(' ').first;
     _loadInitialData();
 
     // 1.8-second Welcome Loading Screen matching Kotlin NextActivity.kt line 149
@@ -87,12 +95,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
+    final session = await _authService.getCurrentSession();
+    if (!mounted) return;
     setState(() {
-      _studentId = prefs.getString('student_id') ?? '';
-      _firstName = widget.firstName.isNotEmpty
-          ? widget.firstName
-          : (prefs.getString('student_first_name') ??
-                widget.userName.split(' ').first);
+      _userName = (session['name'] ?? '').isNotEmpty
+          ? session['name']!
+          : widget.userName;
+      _studentId = (session['studentId'] ?? '').isNotEmpty
+          ? session['studentId']!
+          : (widget.studentId.isNotEmpty
+                ? widget.studentId
+                : (prefs.getString('student_id') ?? ''));
+      _firstName = (session['firstName'] ?? '').isNotEmpty
+          ? session['firstName']!
+          : (widget.firstName.isNotEmpty
+                ? widget.firstName
+                : (prefs.getString('student_first_name') ??
+                      _userName.split(' ').first));
       _settings = AccessibilitySettings(
         textSize: prefs.getString('access_text_size') ?? 'Default',
         boldText: prefs.getBool('access_bold_text') ?? false,
@@ -105,6 +124,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         twoFactorEnabled: prefs.getBool('security_2fa_enabled') ?? true,
       );
     });
+  }
+
+  bool _isMyReport(Report r, String currentUid) {
+    if (currentUid.isEmpty) return false;
+    return r.reporterUid == currentUid;
   }
 
   Future<void> _executeLogout() async {
@@ -177,7 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (isWideScreen) {
       return PupWebPortal(
         userRole: widget.userRole,
-        userName: widget.userName,
+        userName: _userName,
         firstName: _firstName,
         studentId: _studentId,
         settings: _settings,
@@ -245,7 +269,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final read = data['read'] ?? false;
             final targetRole =
                 data['targetRole']?.toString().toLowerCase() ?? '';
-            final targetUser = data['targetUser']?.toString() ?? '';
             final targetUid = data['targetUid']?.toString() ?? '';
 
             if (read) return false;
@@ -253,8 +276,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               return targetRole == 'admin' || targetRole == 'administrator';
             } else {
               return targetRole == 'student' &&
-                  (targetUser == widget.userName ||
-                      (currentUid.isNotEmpty && targetUid == currentUid));
+                  currentUid.isNotEmpty &&
+                  targetUid == currentUid;
             }
           }).length;
         }
@@ -395,7 +418,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isAdmin ? 'Administrator' : widget.userName,
+                          isAdmin ? 'Administrator' : _userName,
                           style: TextStyle(
                             fontSize: _settings.bodyFontSize,
                             fontWeight: _settings.titleFontWeight,
@@ -528,7 +551,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case DrawerScreen.profile:
         return ProfileScreen(
           userRole: widget.userRole,
-          userName: widget.userName,
+          userName: _userName,
           firstName: _firstName,
           studentId: _studentId,
           isEmbedded: true,
@@ -587,22 +610,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         // Filter list: Student sees only their own reports, Admin sees all reports
         final reports = !isAdmin
-            ? all.where((r) {
-                if (currentUid.isNotEmpty && r.reporterUid == currentUid)
-                  return true;
-                if (_studentId.isNotEmpty &&
-                    r.reporterStudentId.isNotEmpty &&
-                    r.reporterStudentId == _studentId)
-                  return true;
-                if (r.reporter.isNotEmpty &&
-                    (r.reporter == widget.userName || r.reporter == _firstName))
-                  return true;
-                if (r.reporterUid.isNotEmpty &&
-                    (r.reporterUid == currentUid ||
-                        r.reporterUid == _studentId))
-                  return true;
-                return false;
-              }).toList()
+            ? all.where((r) => _isMyReport(r, currentUid)).toList()
             : all;
 
         final totalCount = reports.length;
@@ -1027,24 +1035,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               // Filter by student account ownership if onlyMyReports
               if (onlyMyReports) {
-                list = list.where((r) {
-                  if (currentUid.isNotEmpty && r.reporterUid == currentUid)
-                    return true;
-                  if (_studentId.isNotEmpty &&
-                      r.reporterStudentId.isNotEmpty &&
-                      r.reporterStudentId == _studentId)
-                    return true;
-                  if (!r.isAnonymous &&
-                      (r.reporter == widget.userName ||
-                          r.reporter == _firstName))
-                    return true;
-                  if (r.reporter == widget.userName) return true;
-                  if (r.reporterUid.isNotEmpty &&
-                      (r.reporterUid == currentUid ||
-                          r.reporterUid == _studentId))
-                    return true;
-                  return false;
-                }).toList();
+                list = list.where((r) => _isMyReport(r, currentUid)).toList();
               }
 
               // Filter by tab status
@@ -1493,7 +1484,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 final docs = (snapshot.data?.docs ?? []).filterNotifications(
                   isAdmin: isAdmin,
-                  userName: widget.userName,
+                  userName: _userName,
                   currentUid: currentUid,
                 );
 
@@ -1600,15 +1591,14 @@ extension NotificationFilter on List<QueryDocumentSnapshot> {
     return where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       final targetRole = data['targetRole']?.toString().toLowerCase() ?? '';
-      final targetUser = data['targetUser']?.toString() ?? '';
       final targetUid = data['targetUid']?.toString() ?? '';
 
       if (isAdmin) {
         return targetRole == 'admin' || targetRole == 'administrator';
       } else {
         return targetRole == 'student' &&
-            (targetUser == userName ||
-                (currentUid.isNotEmpty && targetUid == currentUid));
+            currentUid.isNotEmpty &&
+            targetUid == currentUid;
       }
     }).toList();
   }
