@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
-import '../dashboard/dashboard_screen.dart';
+import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -42,6 +42,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (contact.isNotEmpty) {
+      final formattedPhone = AuthService.formatToE164(contact);
+      if (formattedPhone.length < 12) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please enter a valid mobile number (e.g. 09171234567 or +639171234567)',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     if (password != confirm) {
       ScaffoldMessenger.of(
         context,
@@ -65,14 +79,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (result['success'] == true) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account created successfully!')),
+        const SnackBar(
+          content: Text('Account created successfully! Please sign in.'),
+          backgroundColor: Colors.green,
+        ),
       );
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (context) =>
-              DashboardScreen(userRole: 'student', userName: name),
-        ),
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
         (route) => false,
       );
     } else {
@@ -158,8 +172,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _contactController,
+                      keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                        labelText: 'Contact Number',
+                        labelText: 'Contact Number (for SMS Verification)',
+                        hintText: 'e.g. 09171234567 or +639171234567',
                         prefixIcon: Icon(Icons.phone_outlined),
                         border: OutlineInputBorder(),
                       ),

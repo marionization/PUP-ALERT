@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,6 +30,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
+  final _firestore = FirebaseFirestore.instance;
   late TextEditingController _nameController;
   late TextEditingController _studentIdController;
   late TextEditingController _departmentController;
@@ -42,9 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.userName);
     _studentIdController = TextEditingController(text: widget.studentId);
-    _departmentController = TextEditingController(
-      text: 'College of Computer and Information Sciences',
-    );
+    _departmentController = TextEditingController(text: '');
     _emailController = TextEditingController(
       text:
           _authService.currentUser?.email ??
@@ -52,6 +52,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? 'admin@pup.edu.ph'
               : 'student@pup.edu.ph'),
     );
+    _loadProfileData();
+  }
+
+  Future<void> _loadProfileData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final user = _authService.currentUser;
+    String name = widget.userName;
+    String studentId = widget.studentId.isNotEmpty
+        ? widget.studentId
+        : (prefs.getString('student_id') ?? '');
+    String department = prefs.getString('user_department') ?? '';
+    String email =
+        user?.email ??
+        (prefs.getString('user_email') ?? _emailController.text);
+
+    if (widget.userRole.toLowerCase() != 'admin' && user != null) {
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>;
+          final fName = data['firstName']?.toString().trim() ?? '';
+          final lName = data['lastName']?.toString().trim() ?? '';
+          final full = data['name']?.toString().trim() ?? '';
+          if (full.isNotEmpty) {
+            name = full;
+          } else if (fName.isNotEmpty || lName.isNotEmpty) {
+            name = '$fName $lName'.trim();
+          }
+          studentId = data['studentId']?.toString().trim() ?? studentId;
+          department = data['department']?.toString().trim() ?? department;
+          email = data['email']?.toString().trim() ?? email;
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _nameController.text = name;
+      _studentIdController.text = studentId;
+      _departmentController.text = department;
+      _emailController.text = email;
+    });
   }
 
   @override
@@ -65,9 +107,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleSave() async {
     setState(() => _isLoading = true);
+    final newName = _nameController.text.trim();
+    final newStudentId = _studentIdController.text.trim();
+    final newDepartment = _departmentController.text.trim();
+    final parts = newName.split(' ');
+    final newFirstName = parts.isNotEmpty ? parts.first : newName;
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', _nameController.text.trim());
-    await prefs.setString('student_id', _studentIdController.text.trim());
+    await prefs.setString('user_name', newName);
+    await prefs.setString('student_first_name', newFirstName);
+    await prefs.setString('student_id', newStudentId);
+    await prefs.setString('user_department', newDepartment);
+
+    final user = _authService.currentUser;
+    if (widget.userRole.toLowerCase() != 'admin' && user != null) {
+      try {
+        await user.updateDisplayName(newName);
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': newName,
+          'firstName': newFirstName,
+          'lastName': parts.length > 1 ? parts.sublist(1).join(' ') : '',
+          'studentId': newStudentId,
+          'department': newDepartment,
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
 
     setState(() {
       _isLoading = false;
