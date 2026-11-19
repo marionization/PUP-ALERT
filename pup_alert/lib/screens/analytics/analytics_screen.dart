@@ -27,6 +27,10 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   final _reportService = ReportService();
   bool _isExporting = false;
+  int _docCurrentPage = 1;
+  int _docRowsPerPage = 10;
+  bool _exportCurrentPageOnly = false;
+  final List<int> _docPageSizeOptions = [5, 10, 15, 25];
 
   void _showSurveysPopup(
     BuildContext context,
@@ -293,7 +297,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<void> _handleCsvDownload(List<Report> reports) async {
     setState(() => _isExporting = true);
     try {
-      final fileName = await AnalyticsService.downloadCsv(reports: reports);
+      final fileName = await AnalyticsService.downloadCsv(
+        reports: reports,
+        rowsPerPage: _docRowsPerPage,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -317,7 +324,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<void> _handlePrintPdf(List<Report> reports) async {
     setState(() => _isExporting = true);
     try {
-      await AnalyticsService.printPdfReport(reports: reports);
+      await AnalyticsService.printPdfReport(
+        reports: reports,
+        rowsPerPage: _docRowsPerPage,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -427,6 +437,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             .length;
         final resolved = reports.where((r) => r.status == 'Resolved').length;
 
+        final totalDocPages = total == 0
+            ? 1
+            : ((total - 1) ~/ _docRowsPerPage) + 1;
+        final safeDocPage = _docCurrentPage.clamp(1, totalDocPages);
+        final docStartIdx = total == 0
+            ? 0
+            : (safeDocPage - 1) * _docRowsPerPage;
+        final docEndIdx = (docStartIdx + _docRowsPerPage).clamp(0, total);
+        final currentPageReports = total == 0
+            ? <Report>[]
+            : reports.sublist(docStartIdx, docEndIdx);
+        final exportTargetReports = _exportCurrentPageOnly
+            ? currentPageReports
+            : reports;
+
         return SingleChildScrollView(
           padding: EdgeInsets.all(settings.cardPadding),
           child: Center(
@@ -440,60 +465,206 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     color: AppTheme.pupLightGold,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Export Campus Incident Data',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  'Download data for administrative reviews, inspections, and reports',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                          Row(
                             children: [
-                              ElevatedButton.icon(
-                                onPressed: _isExporting
-                                    ? null
-                                    : () => _handleCsvDownload(reports),
-                                icon: const Icon(Icons.file_download, size: 18),
-                                label: const Text('Excel CSV'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.pupMaroon,
-                                  foregroundColor: Colors.white,
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Export Campus Incident Data',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Download paginated data for administrative reviews, inspections, and official reports',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              ElevatedButton.icon(
-                                onPressed: _isExporting
-                                    ? null
-                                    : () => _handlePrintPdf(reports),
-                                icon: const Icon(Icons.print, size: 18),
-                                label: const Text('Print PDF'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blueGrey.shade800,
-                                  foregroundColor: Colors.white,
-                                ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: _isExporting
+                                        ? null
+                                        : () => _handleCsvDownload(
+                                            exportTargetReports,
+                                          ),
+                                    icon: const Icon(
+                                      Icons.file_download,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Excel CSV'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.pupMaroon,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: _isExporting
+                                        ? null
+                                        : () => _handlePrintPdf(
+                                            exportTargetReports,
+                                          ),
+                                    icon: const Icon(Icons.print, size: 18),
+                                    label: const Text('Print PDF'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blueGrey.shade800,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 20),
+                          // Document Pagination Settings Row for Print PDF & Excel CSV
+                          Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.menu_book_outlined,
+                                    size: 16,
+                                    color: AppTheme.pupMaroon,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Document Rows per Page:',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    child: DropdownButton<int>(
+                                      value: _docRowsPerPage,
+                                      isDense: true,
+                                      underline: const SizedBox(),
+                                      items: _docPageSizeOptions
+                                          .map(
+                                            (s) => DropdownMenuItem(
+                                              value: s,
+                                              child: Text(
+                                                '$s rows / page',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(() {
+                                            _docRowsPerPage = val;
+                                            _docCurrentPage = 1;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Export Scope:',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ChoiceChip(
+                                    label: Text(
+                                      'All Pages ($totalDocPages)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: !_exportCurrentPageOnly
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                    selected: !_exportCurrentPageOnly,
+                                    selectedColor: AppTheme.pupMaroon,
+                                    backgroundColor: Colors.white,
+                                    visualDensity: VisualDensity.compact,
+                                    onSelected: (_) => setState(
+                                      () => _exportCurrentPageOnly = false,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  ChoiceChip(
+                                    label: Text(
+                                      'Page $safeDocPage Only',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: _exportCurrentPageOnly
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                    selected: _exportCurrentPageOnly,
+                                    selectedColor: AppTheme.pupMaroon,
+                                    backgroundColor: Colors.white,
+                                    visualDensity: VisualDensity.compact,
+                                    onSelected: (_) => setState(
+                                      () => _exportCurrentPageOnly = true,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Paginated Printable / Exportable Document Preview Card
+                  _buildPaginatedDocumentPreviewCard(
+                    settings: settings,
+                    pageReports: currentPageReports,
+                    totalItems: total,
+                    startIndex: docStartIdx,
+                    endIndex: docEndIdx,
+                    currentPage: safeDocPage,
+                    totalPages: totalDocPages,
                   ),
                   const SizedBox(height: 20),
 
@@ -790,6 +961,299 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Campus Analytics & Reports')),
       body: bodyContent,
+    );
+  }
+
+  Widget _buildPaginatedDocumentPreviewCard({
+    required AccessibilitySettings settings,
+    required List<Report> pageReports,
+    required int totalItems,
+    required int startIndex,
+    required int endIndex,
+    required int currentPage,
+    required int totalPages,
+  }) {
+    int startPage = (currentPage - 2).clamp(1, totalPages);
+    int endPage = (startPage + 4).clamp(1, totalPages);
+    if (endPage - startPage < 4) {
+      startPage = (endPage - 4).clamp(1, totalPages);
+    }
+    final pageNumbers = [for (int p = startPage; p <= endPage; p++) p];
+
+    return Card(
+      color: settings.cardColor,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(settings.cardBorderRadius),
+        side: BorderSide(color: settings.borderColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      color: settings.accentColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Printable PDF & Excel Document Preview',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: settings.primaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: settings.accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Page $currentPage of $totalPages',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: settings.accentColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (pageReports.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Text(
+                    'No incident records to preview.',
+                    style: TextStyle(color: settings.secondaryTextColor),
+                  ),
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 38,
+                  dataRowMinHeight: 36,
+                  dataRowMaxHeight: 44,
+                  columnSpacing: 18,
+                  headingRowColor: WidgetStateProperty.all(
+                    settings.contrastMode == 'Dark Contrast'
+                        ? const Color(0xFF2A2A2A)
+                        : Colors.grey.shade100,
+                  ),
+                  columns: const [
+                    DataColumn(
+                      label: Text(
+                        '#',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Date',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Title',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Category',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Location',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Status',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Reporter',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                  rows: List.generate(pageReports.length, (i) {
+                    final r = pageReports[i];
+                    final rowNum = startIndex + i + 1;
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            '$rowNum',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            r.dateSubmitted,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        DataCell(
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Text(
+                              r.title,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            r.category,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        DataCell(
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 140),
+                            child: Text(
+                              r.location,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            r.status,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            r.isAnonymous ? 'Anonymous' : r.reporter,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            const Divider(height: 20),
+            Row(
+              children: [
+                Text(
+                  totalItems == 0
+                      ? 'Showing 0 of 0 records'
+                      : 'Showing ${startIndex + 1}–$endIndex of $totalItems records ($_docRowsPerPage / page)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: settings.secondaryTextColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: currentPage > 1
+                      ? () => setState(() => _docCurrentPage = currentPage - 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_left, size: 16),
+                  label: const Text('Prev', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                ...pageNumbers.map((p) {
+                  final isSel = p == currentPage;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: InkWell(
+                      onTap: () => setState(() => _docCurrentPage = p),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 30,
+                          minHeight: 30,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isSel
+                              ? settings.accentColor
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSel
+                                ? settings.accentColor
+                                : settings.borderColor,
+                          ),
+                        ),
+                        child: Text(
+                          '$p',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSel
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSel
+                                ? Colors.white
+                                : settings.primaryTextColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  onPressed: currentPage < totalPages
+                      ? () => setState(() => _docCurrentPage = currentPage + 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_right, size: 16),
+                  label: const Text('Next', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

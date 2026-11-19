@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -43,6 +44,9 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
   bool _isListening = false;
   XFile? _selectedMedia;
   String _mediaType = ''; // "image" or "video"
+  bool _isVerifyingImage = false;
+  AIImageVerificationResult? _imageVerification;
+  Timer? _imageVerifyDebounce;
 
   String _reporterName = 'Student';
   String _reporterStudentId = '';
@@ -54,7 +58,6 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     'Safety',
     'Cleanliness',
     'Equipment',
-    'Other',
   ];
 
   @override
@@ -170,6 +173,107 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
         });
       }
     }
+
+    if (_selectedMedia != null && _mediaType == 'image') {
+      _imageVerifyDebounce?.cancel();
+      _imageVerifyDebounce = Timer(const Duration(milliseconds: 700), () {
+        _verifySelectedPhoto();
+      });
+    }
+  }
+
+  Future<void> _verifySelectedPhoto() async {
+    if (_selectedMedia == null || _mediaType != 'image') return;
+    if (!mounted) return;
+    setState(() => _isVerifyingImage = true);
+    try {
+      final bytes = await _selectedMedia!.readAsBytes();
+      final result = await AIService.verifyIncidentImage(
+        imageBytes: bytes,
+        fileName: _selectedMedia!.name,
+        reportTitle: _titleController.text,
+        reportDescription: _descriptionController.text,
+        selectedCategory: _selectedCategory,
+      );
+      if (!mounted) return;
+      setState(() {
+        _imageVerification = result;
+        _isVerifyingImage = false;
+        if (result.isAcceptable &&
+            !result.needsMoreContext &&
+            _categories.contains(result.suggestedCategory) &&
+            (_selectedCategory == 'Facilities' ||
+                _selectedCategory == _autoSuggestedCategory)) {
+          _selectedCategory = result.suggestedCategory;
+          _autoSuggestedCategory = result.suggestedCategory;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isVerifyingImage = false);
+    }
+  }
+
+  void _showConfigureGeminiKeyDialog() async {
+    final existingKey = await AIService.getGeminiApiKey();
+    final keyCtrl = TextEditingController(text: existingKey);
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.auto_awesome, color: Color(0xFFC62828)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Gemini Vision AI Key (Optional)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PUP-ALERT includes built-in On-Device Vision AI to block dark, blank, selfie, meme, and nonsense photos.\n\n'
+                'To enable cloud Gemini Multimodal Vision (gemini-2.5-flash) for deep object & scene recognition, paste a Google AI Studio Gemini API Key below:',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: keyCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Gemini API Key',
+                  hintText: 'AIzaSy...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await AIService.setGeminiApiKey(keyCtrl.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (_selectedMedia != null && _mediaType == 'image') {
+                  _verifySelectedPhoto();
+                }
+              },
+              child: const Text('Save & Verify'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Feature 4: Live Duplicate Incident Detection (scoped to current student's reports)
@@ -267,7 +371,11 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
         setState(() {
           _selectedMedia = picked;
           _mediaType = isVideo ? 'video' : 'image';
+          _imageVerification = null;
         });
+        if (!isVideo) {
+          await _verifySelectedPhoto();
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -288,6 +396,26 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
         ),
       );
       return;
+    }
+
+    // Verify attached photo with AI before allowing report submission
+    if (_selectedMedia != null && _mediaType == 'image') {
+      if (_imageVerification == null || _imageVerification!.needsMoreContext) {
+        await _verifySelectedPhoto();
+      }
+      if (!mounted) return;
+      if (_imageVerification != null && !_imageVerification!.isAcceptable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'AI Photo Verification Blocked Submission: ${_imageVerification!.feedback}',
+            ),
+            backgroundColor: Colors.red.shade800,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -341,6 +469,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
 
   @override
   void dispose() {
+    _imageVerifyDebounce?.cancel();
     _titleController.dispose();
     _locationController.dispose();
     _descriptionController.dispose();
@@ -522,7 +651,12 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                     return DropdownMenuItem(value: cat, child: Text(cat));
                   }).toList(),
                   onChanged: (val) {
-                    if (val != null) setState(() => _selectedCategory = val);
+                    if (val != null) {
+                      setState(() => _selectedCategory = val);
+                      if (_selectedMedia != null && _mediaType == 'image') {
+                        _verifySelectedPhoto();
+                      }
+                    }
                   },
                 ),
 
@@ -904,15 +1038,92 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                 ],
 
                 // Media Attachment Section
-                Text(
-                  'Media Attachment (Photo / Video)',
-                  style: TextStyle(
-                    fontSize: smallSize + 1,
-                    fontWeight: settings.mediumFontWeight,
-                    color: primaryTextColor,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Media Attachment (Photo / Video)',
+                      style: TextStyle(
+                        fontSize: smallSize + 1,
+                        fontWeight: settings.mediumFontWeight,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showConfigureGeminiKeyDialog,
+                      icon: Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: accentColor,
+                      ),
+                      label: Text(
+                        'AI Vision Settings',
+                        style: TextStyle(
+                          fontSize: smallSize - 1,
+                          fontWeight: FontWeight.bold,
+                          color: accentColor,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: settings.contrastMode == 'Dark Contrast'
+                        ? const Color(0xFF262626)
+                        : const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('👍', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'AI Photo Verification Requirements:',
+                              style: TextStyle(
+                                fontSize: smallSize,
+                                fontWeight: FontWeight.bold,
+                                color: settings.contrastMode == 'Dark Contrast'
+                                    ? Colors.amber.shade300
+                                    : Colors.amber.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '1. Must belong to and show a real campus issue under Facilities, Maintenance, Safety, Cleanliness, or Equipment.\n'
+                              '2. Someone must be standing at the incident scene giving a Thumbs Up (👍) in the photo.',
+                              style: TextStyle(
+                                fontSize: smallSize - 1,
+                                height: 1.35,
+                                color: settings.contrastMode == 'Dark Contrast'
+                                    ? Colors.white70
+                                    : Colors.brown.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 if (_selectedMedia == null) ...[
                   Row(
                     children: [
@@ -961,80 +1172,333 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                       borderRadius: BorderRadius.circular(
                         settings.cardBorderRadius,
                       ),
-                      border: Border.all(color: settings.borderColor),
+                      border: Border.all(
+                        color: _imageVerification == null
+                            ? settings.borderColor
+                            : (_imageVerification!.isAcceptable
+                                  ? (_imageVerification!.needsMoreContext
+                                        ? Colors.amber.shade600
+                                        : Colors.green.shade600)
+                                  : Colors.red.shade600),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: FutureBuilder<Uint8List>(
+                                future: _selectedMedia!.readAsBytes(),
+                                builder: (ctx, snap) {
+                                  if (snap.hasData) {
+                                    return Image.memory(
+                                      snap.data!,
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                    );
+                                  }
+                                  return Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: settings.borderColor.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                    child: Icon(
+                                      _mediaType == 'video'
+                                          ? Icons.videocam
+                                          : Icons.image,
+                                      color: accentColor,
+                                      size: 28,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _selectedMedia!.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: smallSize,
+                                      fontWeight: FontWeight.bold,
+                                      color: primaryTextColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _mediaType == 'video'
+                                        ? 'Video attached'
+                                        : (_isVerifyingImage
+                                              ? 'AI Vision is analyzing photo...'
+                                              : (_imageVerification == null
+                                                    ? 'Photo attached'
+                                                    : (_imageVerification!
+                                                              .isAcceptable
+                                                          ? (_imageVerification!
+                                                                    .needsMoreContext
+                                                                ? 'Awaiting report details for AI match'
+                                                                : 'AI Verified • Acceptable for report')
+                                                          : 'AI Rejected • Invalid or unrelated photo'))),
+                                    style: TextStyle(
+                                      fontSize: smallSize - 1,
+                                      color: _imageVerification == null
+                                          ? Colors.blueGrey
+                                          : (_imageVerification!.isAcceptable
+                                                ? (_imageVerification!
+                                                          .needsMoreContext
+                                                      ? Colors.amber.shade800
+                                                      : Colors.green.shade700)
+                                                : Colors.red.shade700),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_mediaType == 'image' && !_isVerifyingImage)
+                              IconButton(
+                                icon: Icon(
+                                  Icons.refresh,
+                                  color: accentColor,
+                                  size: 20,
+                                ),
+                                tooltip: 'Re-verify Photo with AI',
+                                onPressed: _verifySelectedPhoto,
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.red),
+                              tooltip: 'Remove Attachment',
+                              onPressed: () => setState(() {
+                                _selectedMedia = null;
+                                _imageVerification = null;
+                              }),
+                            ),
+                          ],
+                        ),
+                        if (_mediaType == 'image') ...[
+                          const SizedBox(height: 10),
+                          if (_isVerifyingImage)
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'AI Vision is checking if this photo is valid and matches your incident report...',
+                                      style: TextStyle(
+                                        fontSize: smallSize - 1,
+                                        color: Colors.blue.shade900,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (_imageVerification != null)
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _imageVerification!.isAcceptable
+                                    ? (_imageVerification!.needsMoreContext
+                                          ? Colors.amber.shade50
+                                          : Colors.green.shade50)
+                                    : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _imageVerification!.isAcceptable
+                                      ? (_imageVerification!.needsMoreContext
+                                            ? Colors.amber.shade300
+                                            : Colors.green.shade300)
+                                      : Colors.red.shade300,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _imageVerification!.isAcceptable
+                                            ? (_imageVerification!
+                                                      .needsMoreContext
+                                                  ? Icons.info_outline
+                                                  : Icons.verified_rounded)
+                                            : Icons.gpp_bad_rounded,
+                                        size: 18,
+                                        color: _imageVerification!.isAcceptable
+                                            ? (_imageVerification!
+                                                      .needsMoreContext
+                                                  ? Colors.amber.shade900
+                                                  : Colors.green.shade800)
+                                            : Colors.red.shade800,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _imageVerification!.isAcceptable
+                                              ? (_imageVerification!
+                                                        .needsMoreContext
+                                                    ? 'AI Vision: Add Title & Description to Confirm Match'
+                                                    : 'AI Photo Verification Passed (${(_imageVerification!.confidence * 100).toInt()}% confidence)')
+                                              : 'AI Photo Verification Rejected (${(_imageVerification!.confidence * 100).toInt()}% confidence)',
+                                          style: TextStyle(
+                                            fontSize: smallSize,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                                _imageVerification!.isAcceptable
+                                                ? (_imageVerification!
+                                                          .needsMoreContext
+                                                      ? Colors.amber.shade900
+                                                      : Colors.green.shade900)
+                                                : Colors.red.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          _imageVerification!.engineUsed,
+                                          style: TextStyle(
+                                            fontSize: smallSize - 2,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Detected: ${_imageVerification!.detectedSubject}',
+                                    style: TextStyle(
+                                      fontSize: smallSize - 1,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _imageVerification!.feedback,
+                                    style: TextStyle(
+                                      fontSize: smallSize - 1,
+                                      color: _imageVerification!.isAcceptable
+                                          ? (_imageVerification!
+                                                    .needsMoreContext
+                                                ? Colors.amber.shade900
+                                                : Colors.green.shade900)
+                                          : Colors.red.shade900,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  if (!_imageVerification!.isAcceptable) ...[
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => _pickMedia(
+                                          ImageSource.gallery,
+                                          false,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.photo_camera,
+                                          size: 14,
+                                        ),
+                                        label: const Text(
+                                          'Replace with Valid Incident Photo',
+                                          style: TextStyle(fontSize: 11),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red.shade800,
+                                          side: BorderSide(
+                                            color: Colors.red.shade400,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+
+                if (_selectedMedia != null &&
+                    _mediaType == 'image' &&
+                    _imageVerification != null &&
+                    !_imageVerification!.isAcceptable) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade300),
                     ),
                     child: Row(
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: FutureBuilder<Uint8List>(
-                            future: _selectedMedia!.readAsBytes(),
-                            builder: (ctx, snap) {
-                              if (snap.hasData) {
-                                return Image.memory(
-                                  snap.data!,
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                );
-                              }
-                              return Container(
-                                width: 60,
-                                height: 60,
-                                color: settings.borderColor.withValues(
-                                  alpha: 0.3,
-                                ),
-                                child: Icon(
-                                  _mediaType == 'video'
-                                      ? Icons.videocam
-                                      : Icons.image,
-                                  color: accentColor,
-                                  size: 28,
-                                ),
-                              );
-                            },
-                          ),
+                        Icon(
+                          Icons.lock_outline,
+                          color: Colors.red.shade800,
+                          size: 18,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedMedia!.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: smallSize,
-                                  fontWeight: FontWeight.bold,
-                                  color: primaryTextColor,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _mediaType == 'video'
-                                    ? 'Video attached'
-                                    : 'Photo attached • Ready for upload',
-                                style: TextStyle(
-                                  fontSize: smallSize - 1,
-                                  color: Colors.green.shade700,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            'Cannot continue: The attached photo was rejected by AI Vision. Please replace or remove the invalid photo to submit your report.',
+                            style: TextStyle(
+                              fontSize: smallSize - 1,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade900,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.red),
-                          tooltip: 'Remove Attachment',
-                          onPressed: () =>
-                              setState(() => _selectedMedia = null),
                         ),
                       ],
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
 
                 // Action Buttons: Save Draft & Submit Report
                 Row(
@@ -1067,7 +1531,15 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleSubmit,
+                        onPressed:
+                            (_isLoading ||
+                                _isVerifyingImage ||
+                                (_selectedMedia != null &&
+                                    _mediaType == 'image' &&
+                                    _imageVerification != null &&
+                                    !_imageVerification!.isAcceptable))
+                            ? null
+                            : _handleSubmit,
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(
                             double.infinity,
@@ -1075,6 +1547,8 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                           ),
                           backgroundColor: accentColor,
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade400,
+                          disabledForegroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
                               settings.cardBorderRadius,
@@ -1092,7 +1566,12 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                                 ),
                               )
                             : Text(
-                                'Submit Report',
+                                (_selectedMedia != null &&
+                                        _mediaType == 'image' &&
+                                        _imageVerification != null &&
+                                        !_imageVerification!.isAcceptable)
+                                    ? 'Invalid Photo — Locked'
+                                    : 'Submit Report',
                                 style: TextStyle(
                                   fontSize: bodySize,
                                   fontWeight: FontWeight.bold,
